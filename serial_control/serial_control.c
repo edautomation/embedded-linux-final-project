@@ -13,19 +13,20 @@
 #define BUFFER_SIZE    (MAX_CMD_LENGTH + 1)
 #define FILENAME       "/var/tmp/serialcontrol.txt"
 
+enum command_type_t
+{
+    COMMAND_INVALID,
+    COMMAND_READ,
+    COMMAND_WRITE,
+};
+
 static char* buffer = NULL;
-static int write_fd = -1;
 
 static inline void cleanup(void)
 {
     if (NULL != buffer)
     {
         free(buffer);
-    }
-
-    if (write_fd > 0)
-    {
-        close(write_fd);
     }
 }
 
@@ -52,30 +53,38 @@ static void handle_signal(int signal)
     }
 }
 
-static bool validate_and_prepare_input(char* buffer, int length)
+static enum command_type_t validate_and_prepare_input(char* buffer, int length)
 {
-    if ((MAX_CMD_LENGTH < length) || (0 == length))
+    if ((MAX_CMD_LENGTH < length) || (length <= 0))
     {
-        return false;
+        return COMMAND_INVALID;
     }
 
-    bool is_valid = true;
+    enum command_type_t cmd_type = COMMAND_INVALID;
     if ('\n' != buffer[length - 1])
     {
         printf("Command too long\n");
-        is_valid = false;
     }
-    else if (('!' != buffer[0]) && ('?' != buffer[0]))
+    else if ('!' == buffer[0])
     {
-        printf("Invalid start of command\n");
-        is_valid = false;
+        cmd_type = COMMAND_WRITE;
+    }
+    else if ('?' == buffer[0])
+    {
+        cmd_type == COMMAND_READ;
     }
     else
+    {
+        printf("Invalid start of command\n");
+    }
+
+    if (!(COMMAND_INVALID == cmd_type))
     {
         buffer[length - 1] = '\0';  // replace newline with string terminator for string handling functions
         printf("Read command from standard input: \"%s\".\n", buffer);
     }
-    return is_valid;
+
+    return cmd_type;
 }
 
 int main(int argc, char* argv[])
@@ -100,26 +109,14 @@ int main(int argc, char* argv[])
         }
         else
         {
-            bool is_valid = validate_and_prepare_input(buffer, read_length);
-            if (!is_valid)
+            enum command_type_t cmd_type = validate_and_prepare_input(buffer, read_length);
+            if (COMMAND_INVALID == cmd_type)
             {
                 printf("Invalid command, ignored\n");
             }
             else
             {
-                int write_fd = open(FILENAME, O_CREAT | O_WRONLY | O_TRUNC);
-                if (write_fd < 0)
-                {
-                    printf("Could not open file for writing\n");
-                    terminate_with_error();
-                }
-
-                // int bytes_written = write(fd, buffer, )
-
-                if (0 == close(write_fd))
-                {
-                    write_fd = -1;
-                }
+                // TODO : handle read or write command
             }
         }
         free(buffer);

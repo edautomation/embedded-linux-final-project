@@ -99,18 +99,18 @@ static enum command_type_t validate_and_prepare_input(char* buffer, int length)
 
     if (!(COMMAND_INVALID == cmd_type))
     {
-        buffer[length - 1] = '\0';  // replace newline with string terminator for string handling functions
+        buffer[length - 1] = '\0';  // replace newline with string terminator for string handling function
         printf("Read command from standard input: \"%s\".\n", buffer);
     }
 
     return cmd_type;
 }
 
-static void add_or_update_value_for_name(size_t name_length, char* equal_sign, size_t value_length)
+static void add_or_update_value_for_name(char* string, size_t name_length, char* equal_sign, size_t value_length)
 {
     char name[MAX_NAME_LENGTH];
     memset((void*)name, 0, MAX_NAME_LENGTH);
-    strncpy(name, buffer, name_length);
+    strncpy(name, string, name_length);
     bool is_new = true;
     struct data_t* list_item = list_head;
     do
@@ -143,28 +143,34 @@ static void add_or_update_value_for_name(size_t name_length, char* equal_sign, s
     }
 }
 
-static void handle_write_command()
+static void handle_write_command(void)
 {
     printf("Write command\n");
 
-    char* equal_sign = strchr(buffer, '=');
+    char* write_command = buffer + 1;
+    char* equal_sign = strchr(write_command, '=');
     if (NULL == equal_sign)
     {
         printf("Invalid format, missing =\n");
     }
     else
     {
-        size_t name_length = equal_sign - buffer;
-        size_t value_length = strlen(buffer) - name_length - 1;
+        size_t name_length = equal_sign - write_command;
+        size_t value_length = strlen(write_command) - name_length - 1;
         if (name_length > MAX_NAME_LENGTH || value_length > MAX_VALUE_LENGTH)
         {
             printf("Invalid format, name or value string too long\n");
         }
         else
         {
-            add_or_update_value_for_name(name_length, equal_sign, value_length);
+            add_or_update_value_for_name(write_command, name_length, equal_sign, value_length);
         }
     }
+}
+
+static void handle_read_command(void)
+{
+    printf("Read command\n");
 }
 
 int main(int argc, char* argv[])
@@ -197,6 +203,10 @@ int main(int argc, char* argv[])
             else if (COMMAND_WRITE == cmd_type)
             {
                 handle_write_command();
+            }
+            else if (COMMAND_READ == cmd_type)
+            {
+                handle_read_command();
             }
             else
             {

@@ -15,6 +15,13 @@
 #define MAX_CMD_LENGTH   MAX_NAME_LENGTH + MAX_VALUE_LENGTH + 1
 #define BUFFER_SIZE      (MAX_CMD_LENGTH + 1)
 
+#define DEBUG
+#ifdef DEBUG
+#define LOG_DEBUG(...) printf(__VA_ARGS__)
+#else
+#define LOG_DEBUG(...)
+#endif
+
 enum command_type_t
 {
     COMMAND_INVALID,
@@ -26,7 +33,7 @@ struct data_t
 {
     char name[MAX_NAME_LENGTH];
     char value[MAX_VALUE_LENGTH];
-    struct data_t* p_next;
+    struct data_t* next;
 };
 
 static char* buffer = NULL;
@@ -44,21 +51,21 @@ static inline void cleanup(void)
     while (&list_root != list_item)
     {
         struct data_t* item_to_delete = list_item;
-        list_item = list_item->p_next;
+        list_item = list_item->next;
         free(item_to_delete);
     }
 }
 
 static inline void terminate_normally(void)
 {
-    printf("Terminating normally\n");
+    LOG_DEBUG("Terminating normally\n");
     cleanup();
     exit(EXIT_SUCCESS);
 }
 
 static inline void terminate_with_error(void)
 {
-    printf("Terminating because of an error\n");
+    LOG_DEBUG("Terminating because of an error\n");
     cleanup();
     exit(EXIT_FAILURE);
 }
@@ -67,7 +74,7 @@ static void handle_signal(int signal)
 {
     if (signal == SIGINT || signal == SIGTERM)
     {
-        printf("\nGot SIGINT or SIGTERM\n");
+        LOG_DEBUG("\nGot SIGINT or SIGTERM\n");
         terminate_normally();
     }
 }
@@ -82,7 +89,7 @@ static enum command_type_t validate_and_prepare_input(char* buffer, int length)
     enum command_type_t cmd_type = COMMAND_INVALID;
     if ('\n' != buffer[length - 1])
     {
-        printf("Command too long\n");
+        LOG_DEBUG("Command too long\n");
     }
     else if ('!' == buffer[0])
     {
@@ -94,13 +101,13 @@ static enum command_type_t validate_and_prepare_input(char* buffer, int length)
     }
     else
     {
-        printf("Invalid start of command\n");
+        LOG_DEBUG("Invalid start of command\n");
     }
 
     if (!(COMMAND_INVALID == cmd_type))
     {
         buffer[length - 1] = '\0';  // replace newline with string terminator for string handling function
-        printf("Read command from standard input: \"%s\".\n", buffer);
+        LOG_DEBUG("Read command from standard input: \"%s\".\n", buffer);
     }
 
     return cmd_type;
@@ -117,16 +124,16 @@ static void add_or_update_value_for_name(char* string, size_t name_length, char*
     {
         if (0 == strncmp(list_item->name, name, name_length))
         {
-            printf("Found name!\n");
+            LOG_DEBUG("Found name!\n");
             is_new = false;
             break;
         }
-        list_item = list_item->p_next;
+        list_item = list_item->next;
     } while (NULL != list_item);
 
     if (is_new)
     {
-        printf("New name: %s\n", name);
+        LOG_DEBUG("New name: %s\n", name);
         list_item = malloc(sizeof(struct data_t));
     }
 
@@ -134,24 +141,25 @@ static void add_or_update_value_for_name(char* string, size_t name_length, char*
     strncpy(list_item->value, equal_sign + 1, value_length);
     list_item->name[name_length] = '\0';
     list_item->value[value_length] = '\0';
-    printf("Writing %s = %s\n", list_item->name, list_item->value);
+    LOG_DEBUG("Writing %s = %s\n", list_item->name, list_item->value);
+    printf("OK\n");
 
     if (is_new)
     {
-        list_item->p_next = list_head;
+        list_item->next = list_head;
         list_head = list_item;
     }
 }
 
 static void handle_write_command(void)
 {
-    printf("Write command\n");
+    LOG_DEBUG("Write command\n");
 
     char* write_command = buffer + 1;
     char* equal_sign = strchr(write_command, '=');
     if (NULL == equal_sign)
     {
-        printf("Invalid format, missing =\n");
+        LOG_DEBUG("Invalid format, missing =\n");
     }
     else
     {
@@ -159,7 +167,7 @@ static void handle_write_command(void)
         size_t value_length = strlen(write_command) - name_length - 1;
         if (name_length > MAX_NAME_LENGTH || value_length > MAX_VALUE_LENGTH)
         {
-            printf("Invalid format, name or value string too long\n");
+            LOG_DEBUG("Invalid format, name or value string too long\n");
         }
         else
         {
@@ -170,12 +178,35 @@ static void handle_write_command(void)
 
 static void handle_read_command(void)
 {
-    printf("Read command\n");
+    char* name = buffer + 1;
+    size_t name_length = strlen(name);
+    if (name_length > MAX_NAME_LENGTH)
+    {
+        LOG_DEBUG("Invalid format, name string too long!\n");
+    }
+    else
+    {
+        struct data_t* list_item = list_head;
+        do
+        {
+            if (0 == strcmp(list_item->name, name))
+            {
+                printf("%s\n", list_item->value);
+                break;
+            }
+            list_item = list_item->next;
+        } while (NULL != list_item);
+
+        if (NULL == list_item)
+        {
+            printf("NO ENTRY\n");
+        }
+    }
 }
 
 int main(int argc, char* argv[])
 {
-    printf("Hello, serial control!\n");
+    LOG_DEBUG("Hello, serial control!\n");
 
     signal(SIGINT, handle_signal);
     signal(SIGTERM, handle_signal);
@@ -191,14 +222,14 @@ int main(int argc, char* argv[])
         int read_length = read(STDIN_FILENO, buffer, MAX_CMD_LENGTH);
         if (read_length < 0)
         {
-            printf("Could not read from standard input.\n");
+            LOG_DEBUG("Could not read from standard input.\n");
         }
         else
         {
             enum command_type_t cmd_type = validate_and_prepare_input(buffer, read_length);
             if (COMMAND_INVALID == cmd_type)
             {
-                printf("Invalid command, ignored\n");
+                LOG_DEBUG("Invalid command, ignored\n");
             }
             else if (COMMAND_WRITE == cmd_type)
             {
@@ -210,7 +241,7 @@ int main(int argc, char* argv[])
             }
             else
             {
-                printf("Unexpected path in code!\n");
+                LOG_DEBUG("Unexpected path in code!\n");
                 terminate_with_error();
             }
         }

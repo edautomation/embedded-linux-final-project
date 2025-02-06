@@ -79,7 +79,7 @@ static void handle_signal(int signal)
     }
 }
 
-static enum command_type_t validate_and_prepare_input(char* buffer, int length)
+static enum command_type_t validate_and_prepare_input(char* input, int length)
 {
     if ((MAX_CMD_LENGTH < length) || (length <= 0))
     {
@@ -87,15 +87,15 @@ static enum command_type_t validate_and_prepare_input(char* buffer, int length)
     }
 
     enum command_type_t cmd_type = COMMAND_INVALID;
-    if ('\n' != buffer[length - 1])
+    if ('\n' != input[length - 1])
     {
         LOG_DEBUG("Command too long\n");
     }
-    else if ('!' == buffer[0])
+    else if ('!' == input[0])
     {
         cmd_type = COMMAND_WRITE;
     }
-    else if ('?' == buffer[0])
+    else if ('?' == input[0])
     {
         cmd_type = COMMAND_READ;
     }
@@ -106,8 +106,8 @@ static enum command_type_t validate_and_prepare_input(char* buffer, int length)
 
     if (!(COMMAND_INVALID == cmd_type))
     {
-        buffer[length - 1] = '\0';  // replace newline with string terminator for string handling function
-        LOG_DEBUG("Read command from standard input: \"%s\".\n", buffer);
+        input[length - 1] = '\0';  // replace newline with string terminator for string handling function
+        LOG_DEBUG("Read command from standard input: \"%s\".\n", input);
     }
 
     return cmd_type;

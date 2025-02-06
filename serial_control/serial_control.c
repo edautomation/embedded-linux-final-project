@@ -1,6 +1,7 @@
 #include <stdbool.h>
 #include <stdio.h>
 #include <stdlib.h>
+#include <string.h>
 
 #include <errno.h>
 #include <fcntl.h>
@@ -9,9 +10,11 @@
 #include <sys/types.h>
 #include <unistd.h>
 
-#define MAX_CMD_LENGTH 50
-#define BUFFER_SIZE    (MAX_CMD_LENGTH + 1)
-#define FILENAME       "/var/tmp/serialcontrol.txt"
+#define MAX_NAME_LENGTH  30
+#define MAX_VALUE_LENGTH 20
+#define MAX_CMD_LENGTH   MAX_NAME_LENGTH + MAX_VALUE_LENGTH + 1
+#define BUFFER_SIZE      (MAX_CMD_LENGTH + 1)
+#define FILENAME         "/var/tmp/serialcontrol.txt"
 
 enum command_type_t
 {
@@ -20,13 +23,30 @@ enum command_type_t
     COMMAND_WRITE,
 };
 
+struct data_t
+{
+    char name[MAX_NAME_LENGTH];
+    char value[MAX_VALUE_LENGTH];
+    struct data_t* p_next;
+};
+
 static char* buffer = NULL;
+static struct data_t list_root = {0};
+static struct data_t* list_head = &list_root;
 
 static inline void cleanup(void)
 {
     if (NULL != buffer)
     {
         free(buffer);
+    }
+
+    struct data_t* list_item = list_head;
+    while (&list_root != list_item)
+    {
+        struct data_t* item_to_delete = list_item;
+        list_item = list_item->p_next;
+        free(item_to_delete);
     }
 }
 
@@ -71,7 +91,7 @@ static enum command_type_t validate_and_prepare_input(char* buffer, int length)
     }
     else if ('?' == buffer[0])
     {
-        cmd_type == COMMAND_READ;
+        cmd_type = COMMAND_READ;
     }
     else
     {
@@ -113,6 +133,61 @@ int main(int argc, char* argv[])
             if (COMMAND_INVALID == cmd_type)
             {
                 printf("Invalid command, ignored\n");
+            }
+            else if (COMMAND_WRITE == cmd_type)
+            {
+                printf("Write command\n");
+
+                char* equal_sign = strchr(buffer, '=');
+                if (NULL == equal_sign)
+                {
+                    printf("Invalid format, missing =\n");
+                }
+                else
+                {
+                    size_t name_length = equal_sign - buffer;
+                    size_t value_length = strlen(buffer) - name_length - 1;
+                    if (name_length > MAX_NAME_LENGTH || value_length > MAX_VALUE_LENGTH)
+                    {
+                        printf("Invalid format, name or value string too long\n");
+                    }
+                    else
+                    {
+                        char name[MAX_NAME_LENGTH];
+                        memset((void*)name, 0, MAX_NAME_LENGTH);
+                        strncpy(name, buffer, name_length);
+                        bool is_new = true;
+                        struct data_t* list_item = list_head;
+                        do
+                        {
+                            if (0 == strncmp(list_item->name, name, name_length))
+                            {
+                                printf("Found name!\n");
+                                is_new = false;
+                                break;
+                            }
+                            list_item = list_item->p_next;
+                        } while (NULL != list_item);
+
+                        if (is_new)
+                        {
+                            printf("New name: %s\n", name);
+                            list_item = malloc(sizeof(struct data_t));
+                        }
+
+                        strncpy(list_item->name, name, name_length);
+                        strncpy(list_item->value, equal_sign + 1, value_length);
+                        list_item->name[name_length] = '\0';
+                        list_item->value[value_length] = '\0';
+                        printf("Writing %s = %s\n", list_item->name, list_item->value);
+
+                        if (is_new)
+                        {
+                            list_item->p_next = list_head;
+                            list_head = list_item;
+                        }
+                    }
+                }
             }
             else
             {

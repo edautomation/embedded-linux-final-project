@@ -3,19 +3,29 @@
 #include <stdlib.h>
 
 #include <errno.h>
+#include <fcntl.h>
 #include <signal.h>
+#include <sys/stat.h>
+#include <sys/types.h>
 #include <unistd.h>
 
 #define MAX_CMD_LENGTH 50
 #define BUFFER_SIZE    (MAX_CMD_LENGTH + 1)
+#define FILENAME       "/var/tmp/serialcontrol.txt"
 
-static char* buffer;
+static char* buffer = NULL;
+static int write_fd = -1;
 
 static inline void cleanup(void)
 {
     if (NULL != buffer)
     {
         free(buffer);
+    }
+
+    if (write_fd > 0)
+    {
+        close(write_fd);
     }
 }
 
@@ -94,6 +104,22 @@ int main(int argc, char* argv[])
             if (!is_valid)
             {
                 printf("Invalid command, ignored\n");
+            }
+            else
+            {
+                int write_fd = open(FILENAME, O_CREAT | O_WRONLY | O_TRUNC);
+                if (write_fd < 0)
+                {
+                    printf("Could not open file for writing\n");
+                    terminate_with_error();
+                }
+
+                // int bytes_written = write(fd, buffer, )
+
+                if (0 == close(write_fd))
+                {
+                    write_fd = -1;
+                }
             }
         }
         free(buffer);

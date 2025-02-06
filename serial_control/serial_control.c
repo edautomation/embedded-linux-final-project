@@ -9,15 +9,27 @@
 #define MAX_CMD_LENGTH 50
 #define BUFFER_SIZE    (MAX_CMD_LENGTH + 1)
 
+static char* buffer;
+
+static inline void cleanup(void)
+{
+    if (NULL != buffer)
+    {
+        free(buffer);
+    }
+}
+
 static inline void terminate_normally(void)
 {
     printf("Terminating normally\n");
+    cleanup();
     exit(EXIT_SUCCESS);
 }
 
 static inline void terminate_with_error(void)
 {
     printf("Terminating because of an error\n");
+    cleanup();
     exit(EXIT_FAILURE);
 }
 
@@ -30,31 +42,61 @@ static void handle_signal(int signal)
     }
 }
 
+static bool validate_and_prepare_input(char* buffer, int length)
+{
+    if ((MAX_CMD_LENGTH < length) || (0 == length))
+    {
+        return false;
+    }
+
+    bool is_valid = true;
+    if ('\n' != buffer[length - 1])
+    {
+        printf("Command too long\n");
+        is_valid = false;
+    }
+    else if (('!' != buffer[0]) && ('?' != buffer[0]))
+    {
+        printf("Invalid start of command\n");
+        is_valid = false;
+    }
+    else
+    {
+        buffer[length - 1] = '\0';  // replace newline with string terminator for string handling functions
+        printf("Read command from standard input: \"%s\".\n", buffer);
+    }
+    return is_valid;
+}
+
 int main(int argc, char* argv[])
 {
-    printf("Hello, world!\n");
+    printf("Hello, serial control!\n");
 
     signal(SIGINT, handle_signal);
     signal(SIGTERM, handle_signal);
 
     while (true)
     {
-        char* buffer = malloc(BUFFER_SIZE * sizeof(char));
+        buffer = malloc(BUFFER_SIZE * sizeof(char));
         if (NULL == buffer)
         {
             terminate_with_error();
         }
 
-        int res = read(STDIN_FILENO, buffer, MAX_CMD_LENGTH);
-        if (res < 0)
+        int read_length = read(STDIN_FILENO, buffer, MAX_CMD_LENGTH);
+        if (read_length < 0)
         {
             printf("Could not read from standard input.\n");
         }
         else
         {
-            buffer[res] = '\0';  // for string handling functions
-            printf("Read %d bytes from standard input: \"%s\".\n", res, buffer);
+            bool is_valid = validate_and_prepare_input(buffer, read_length);
+            if (!is_valid)
+            {
+                printf("Invalid command, ignored\n");
+            }
         }
+        free(buffer);
     }
 
     return 0;

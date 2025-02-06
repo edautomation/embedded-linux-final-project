@@ -4,7 +4,7 @@ LDFLAGS ?= -lpthread -lrt
 SRC = $(wildcard *.c)
 OBJ = $(SRC:.c=.o)
 
-TARGET ?= serialcontrol
+TARGET ?= serial_control
 
 all: $(TARGET)
 

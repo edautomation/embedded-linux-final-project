@@ -71,7 +71,6 @@ int byte_fifo_write(struct byte_fifo_t* const fifo, const unsigned char* const b
             fifo->n_elements--;
             n_bytes_overwritten++;
         }
-
         mutex_unlock(&fifo->lock);
     }
 

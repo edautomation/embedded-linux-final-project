@@ -1,0 +1,10 @@
+#!/bin/sh
+module=serial_driver
+device=serial_driver
+cd `dirname $0`
+# invoke rmmod with all arguments we got
+rmmod $module || exit 1
+
+# Remove stale nodes
+
+rm -f /dev/${device}

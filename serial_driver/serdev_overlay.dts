@@ -1,0 +1,16 @@
+/dts-v1/;
+/plugin/;
+
+/ {
+    compatible = "ti,beaglebone", "ti,beaglebone-black";
+
+ 	fragment@0 {
+		target = <&uart4>;
+		__overlay__ {
+			serialdev {
+				compatible = "serialdev";
+				status = "okay";
+			};
+		};
+	};
+};

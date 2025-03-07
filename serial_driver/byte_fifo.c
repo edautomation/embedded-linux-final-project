@@ -26,24 +26,33 @@ int byte_fifo_init(struct byte_fifo_t* const fifo)
 
     memset((void*)fifo->data, 0, fifo->size);
 
+    mutex_init(&fifo->lock);
+
     return 0;
 }
 
-int byte_fifo_is_available(const struct byte_fifo_t* const fifo)
+int byte_fifo_is_available(struct byte_fifo_t* const fifo)
 {
     RETURN_IF(NULL == fifo, EFAULT);
-    return (fifo->n_elements < fifo->size);
+
+    mutex_lock(&fifo->lock);
+    int is_available = (fifo->n_elements < fifo->size);
+    mutex_unlock(&fifo->lock);
+
+    return is_available;
 }
 
-int byte_fifo_write(struct byte_fifo_t* const fifo, const char* const bytes, unsigned int len)
+int byte_fifo_write(struct byte_fifo_t* const fifo, const unsigned char* const bytes, unsigned int len)
 {
     RETURN_IF(NULL == fifo, EFAULT);
     RETURN_IF(NULL == fifo->data, EFAULT);
     RETURN_IF(NULL == bytes, EFAULT);
 
     int n_bytes_written = 0;
+    int n_bytes_overwritten = 0;
     while (len > 0)
     {
+        mutex_lock(&fifo->lock);
         if (fifo->n_elements < fifo->size)
         {
             unsigned int write_index = fifo->write_index;
@@ -57,14 +66,19 @@ int byte_fifo_write(struct byte_fifo_t* const fifo, const char* const bytes, uns
         }
         else
         {
-            break;
+            unsigned int read_index = fifo->read_index;
+            fifo->read_index = (read_index < (fifo->size - 1)) ? read_index + 1 : 0;
+            fifo->n_elements--;
+            n_bytes_overwritten++;
         }
+
+        mutex_unlock(&fifo->lock);
     }
 
-    return n_bytes_written;
+    return n_bytes_overwritten;
 }
 
-int byte_fifo_read(struct byte_fifo_t* const fifo, char* const buffer, unsigned int max_len)
+int byte_fifo_read(struct byte_fifo_t* const fifo, unsigned char* const buffer, unsigned int max_len)
 {
     RETURN_IF(NULL == fifo, EFAULT);
     RETURN_IF(NULL == fifo->data, EFAULT);
@@ -73,6 +87,7 @@ int byte_fifo_read(struct byte_fifo_t* const fifo, char* const buffer, unsigned 
     int n_bytes_read = 0;
     while (n_bytes_read < max_len)
     {
+        mutex_lock(&fifo->lock);
         if (fifo->n_elements > 0)
         {
             unsigned int read_index = fifo->read_index;
@@ -80,9 +95,11 @@ int byte_fifo_read(struct byte_fifo_t* const fifo, char* const buffer, unsigned 
             fifo->read_index = (read_index < (fifo->size - 1)) ? read_index + 1 : 0;
             fifo->n_elements--;
             n_bytes_read++;
+            mutex_unlock(&fifo->lock);
         }
         else
         {
+            mutex_unlock(&fifo->lock);
             break;
         }
     }

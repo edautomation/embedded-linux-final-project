@@ -35,6 +35,7 @@ static struct byte_fifo_t rx_fifo = {
 struct modbus_device_t
 {
     struct byte_fifo_t* const fifo;
+    struct serdev_device* serdev;
     struct cdev cdev;  // Char device structure
 };
 static struct modbus_device_t modbus_dev = {
@@ -69,12 +70,59 @@ int modbus_dev_release(struct inode* inode, struct file* filp)
 
 ssize_t modbus_dev_read(struct file* filp, char __user* buf, size_t count, loff_t* f_pos)
 {
-    return 0;
+    struct modbus_device_t* dev = NULL;
+    struct byte_fifo_t* fifo = NULL;
+    dev = filp->private_data;
+    fifo = dev->fifo;
+
+    if ((NULL == dev) || (NULL == fifo))
+    {
+        return -EFAULT;
+    }
+
+    char* kbuffer = kmalloc(count, GFP_KERNEL);
+    if (NULL == kbuffer)
+    {
+        return -ENOMEM;
+    }
+
+    int read_bytes = byte_fifo_read(fifo, kbuffer, count);
+    int res = copy_to_user(buf, kbuffer, read_bytes);
+
+    kfree(kbuffer);
+    return res;
 }
 
 ssize_t modbus_dev_write(struct file* filp, const char __user* buf, size_t count, loff_t* f_pos)
 {
-    return 0;
+    struct modbus_device_t* dev = dev = filp->private_data;
+    struct serdev_device* serdev = serdev = dev->serdev;
+
+    if ((NULL == dev) || (NULL == serdev))
+    {
+        return -EFAULT;
+    }
+
+    char* kbuffer = kmalloc(count, GFP_KERNEL);
+    if (NULL == kbuffer)
+    {
+        printk("Modbus device - Could not allocate memory");
+        return -ENOMEM;
+    }
+
+    // We will manipulate memory in the kernel space
+    if (copy_from_user(kbuffer, buf, count))
+    {
+        printk("Modbus device - Could not copy from user space!");
+        kfree(kbuffer);
+        return -EFAULT;
+    }
+
+    int status = serdev_device_write_buf(serdev, kbuffer, count);
+    printk("serdev_serial - Wrote %d bytes.\n", status);
+    kfree(kbuffer);
+
+    return status;
 }
 
 struct file_operations modbus_dev_fops = {
@@ -163,6 +211,8 @@ static int serdev_serial_probe(struct serdev_device* serdev)
     status = serdev_device_write_buf(serdev, "Hello, from serdev", sizeof("Hello, from serdev"));
     printk("serdev_serial - Wrote %d bytes.\n", status);
 
+    modbus_dev.serdev = serdev;
+
     return 0;
 }
 
@@ -182,7 +232,7 @@ static int __init my_init(void)
 {
     dev_t dev = 0;
     int result = 0;
-    result = alloc_chrdev_region(&dev, modbus_dev_minor, 1, "modbus_devchar");
+    result = alloc_chrdev_region(&dev, modbus_dev_minor, 1, "modbus_dev_char");
     modbus_dev_major = MAJOR(dev);
     if (result < 0)
     {

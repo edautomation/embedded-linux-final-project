@@ -85,10 +85,17 @@ ssize_t modbus_dev_read(struct file* filp, char __user* buf, size_t count, loff_
     int read_bytes = byte_fifo_read(fifo, kbuffer, count);
     printk("Read %d bytes from fifo", read_bytes);
 
-    int res = copy_to_user(buf, kbuffer, read_bytes);
+    if (read_bytes > 0)
+    {
+        if (copy_to_user(buf, kbuffer, read_bytes) > 0)
+        {
+            return -EFAULT;
+        }
+    }
 
     kfree(kbuffer);
-    return res;
+
+    return read_bytes;
 }
 
 ssize_t modbus_dev_write(struct file* filp, const char __user* buf, size_t count, loff_t* f_pos)

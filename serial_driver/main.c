@@ -68,10 +68,8 @@ int modbus_dev_release(struct inode* inode, struct file* filp)
 
 ssize_t modbus_dev_read(struct file* filp, char __user* buf, size_t count, loff_t* f_pos)
 {
-    struct modbus_device_t* dev = NULL;
-    struct byte_fifo_t* fifo = NULL;
-    dev = filp->private_data;
-    fifo = dev->fifo;
+    struct modbus_device_t* dev = filp->private_data;
+    struct byte_fifo_t* fifo = dev->fifo;
 
     if ((NULL == dev) || (NULL == fifo))
     {
@@ -85,6 +83,8 @@ ssize_t modbus_dev_read(struct file* filp, char __user* buf, size_t count, loff_
     }
 
     int read_bytes = byte_fifo_read(fifo, kbuffer, count);
+    printk("Read %d bytes from fifo", read_bytes);
+
     int res = copy_to_user(buf, kbuffer, read_bytes);
 
     kfree(kbuffer);
@@ -176,7 +176,15 @@ static int serdev_serial_recv(struct serdev_device* serdev, const unsigned char*
     int res = byte_fifo_write(&rx_fifo, buffer, size);
     if (res > 0)
     {
-        printk("serdev_serial - Overwrote %d bytes.", res);
+        printk("serdev_serial - Overwrote %d bytes", res);
+    }
+    else if (res < 0)
+    {
+        printk("serdev_serial - Error: %d", res);
+    }
+    else
+    {
+        printk("serdev_serial - Write %lu bytes", size);
     }
 
     return size;

@@ -19,6 +19,9 @@ MODULE_LICENSE("GPL");
 MODULE_AUTHOR("Emile Decosterd");
 MODULE_DESCRIPTION("Simple char driver using a serial device");
 
+int modbus_dev_major = 0;  // use dynamic major
+int modbus_dev_minor = 0;
+
 #define BUFFER_LENGTH 256
 
 // Synchronization fifo
@@ -62,6 +65,41 @@ int modbus_dev_release(struct inode* inode, struct file* filp)
 
     // Nothing to do here
     return 0;
+}
+
+ssize_t modbus_dev_read(struct file* filp, char __user* buf, size_t count, loff_t* f_pos)
+{
+    return 0;
+}
+
+ssize_t modbus_dev_write(struct file* filp, const char __user* buf, size_t count, loff_t* f_pos)
+{
+    return 0;
+}
+
+struct file_operations modbus_dev_fops = {
+    .owner = THIS_MODULE,
+    .read = modbus_dev_read,
+    .write = modbus_dev_write,
+    // .llseek = modbus_dev_seek,
+    // .unlocked_ioctl = modbus_dev_ioctl,
+    .open = modbus_dev_open,
+    .release = modbus_dev_release,
+};
+
+static int modbus_dev_setup_cdev(struct modbus_device_t* dev)
+{
+    int err, devno = MKDEV(modbus_dev_major, modbus_dev_minor);
+
+    cdev_init(&dev->cdev, &modbus_dev_fops);
+    dev->cdev.owner = THIS_MODULE;
+    dev->cdev.ops = &modbus_dev_fops;
+    err = cdev_add(&dev->cdev, devno, 1);
+    if (err)
+    {
+        printk(KERN_ERR "Error %d adding modbus_dev cdev", err);
+    }
+    return err;
 }
 
 /* Declate the probe and remove functions */
@@ -139,6 +177,17 @@ static void serdev_serial_remove(struct serdev_device* serdev)
  */
 static int __init my_init(void)
 {
+    dev_t dev = 0;
+    int result = 0;
+    result = alloc_chrdev_region(&dev, modbus_dev_minor, 1, "modbus_devchar");
+    modbus_dev_major = MAJOR(dev);
+    if (result < 0)
+    {
+        printk(KERN_WARNING "Can't get major %d\n", modbus_dev_major);
+        return result;
+    }
+    memset(&modbus_dev, 0, sizeof(struct modbus_device_t));
+
     printk("Serial Modbus - Loading the driver...\n");
     if (serdev_device_driver_register(&serdev_serial_driver))
     {
@@ -148,7 +197,14 @@ static int __init my_init(void)
 
     byte_fifo_init(&rx_fifo);
 
-    return 0;
+    result = modbus_dev_setup_cdev(&modbus_dev);
+
+    if (result)
+    {
+        unregister_chrdev_region(dev, 1);
+    }
+
+    return result;
 }
 
 /**

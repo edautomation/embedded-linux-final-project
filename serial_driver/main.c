@@ -245,19 +245,20 @@ static int __init my_init(void)
 {
     dev_t dev = 0;
     int result = 0;
-    result = alloc_chrdev_region(&dev, modbus_dev_minor, 1, "serial_modbus");
-    modbus_dev_major = MAJOR(dev);
-    if (result < 0)
-    {
-        printk(KERN_WARNING "Can't get major %d\n", modbus_dev_major);
-        return result;
-    }
 
     printk("Serial Modbus - Loading the serial device driver...\n");
     if (serdev_device_driver_register(&serdev_serial_driver))
     {
         printk("serdev_serial - Error! Could not load serial device driver\n");
         return -1;
+    }
+
+    result = alloc_chrdev_region(&dev, modbus_dev_minor, 1, "serial_modbus");
+    modbus_dev_major = MAJOR(dev);
+    if (result < 0)
+    {
+        printk(KERN_WARNING "Can't get major %d\n", modbus_dev_major);
+        return result;
     }
 
     memset(&modbus_dev, 0, sizeof(struct modbus_device_t));

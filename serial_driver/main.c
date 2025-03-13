@@ -127,8 +127,11 @@ static int serdev_serial_recv(struct serdev_device* serdev, const unsigned char*
 {
     printk("serdev_serial - Received %ld bytes with \"%s\"\n", size, buffer);
 
-    // TODO : mutex
-    (void)byte_fifo_write(&rx_fifo, buffer, size);
+    int res = byte_fifo_write(&rx_fifo, buffer, size);
+    if (res > 0)
+    {
+        printk("serdev_serial - Overwrote %d bytes.", res);
+    }
 
     return size;
 }
@@ -188,10 +191,10 @@ static int __init my_init(void)
     }
     memset(&modbus_dev, 0, sizeof(struct modbus_device_t));
 
-    printk("Serial Modbus - Loading the driver...\n");
+    printk("Serial Modbus - Loading the serial device driver...\n");
     if (serdev_device_driver_register(&serdev_serial_driver))
     {
-        printk("serdev_serial - Error! Could not load driver\n");
+        printk("serdev_serial - Error! Could not load serial device driver\n");
         return -1;
     }
 
@@ -214,6 +217,16 @@ static void __exit my_exit(void)
 {
     printk("Serial Modbus - Unload driver");
     serdev_device_driver_unregister(&serdev_serial_driver);
+
+    dev_t devno = MKDEV(modbus_dev_major, modbus_dev_minor);
+
+    cdev_del(&modbus_dev.cdev);
+
+    /**
+     * TODO: cleanup modbus_dev specific portions here as necessary
+     */
+
+    unregister_chrdev_region(devno, 1);
 }
 
 module_init(my_init);

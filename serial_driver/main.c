@@ -245,7 +245,7 @@ static int __init my_init(void)
 {
     dev_t dev = 0;
     int result = 0;
-    result = alloc_chrdev_region(&dev, modbus_dev_minor, 1, "modbus_dev_char");
+    result = alloc_chrdev_region(&dev, modbus_dev_minor, 1, "serial_modbus");
     modbus_dev_major = MAJOR(dev);
     if (result < 0)
     {

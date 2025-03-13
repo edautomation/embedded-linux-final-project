@@ -1,6 +1,6 @@
 #!/bin/sh
-module=serial_driver
-device=serial_driver
+module=serial_modbus
+device=serial_modbus
 mode="664"
 cd `dirname $0`
 set -e
@@ -11,13 +11,20 @@ else
     group="wheel"
 fi
 
-if [ -e ${module}.ko ]; then
-    echo "Loading local built file ${module}.ko"
-    insmod ./$module.ko $* || exit 1
+if lsmod | grep -q "^$module"; then
+    echo "Module $module is loaded."
 else
-    echo "Local file ${module}.ko not found, attempting to modprobe"
-    modprobe ${module} || exit 1
+    echo "Module $module is not loaded, loading it."
+    if [ -e ${module}.ko ]; then
+        echo "Loading local built file ${module}.ko"
+        insmod ./$module.ko $* || exit 1
+    else
+        echo "Local file ${module}.ko not found, attempting to modprobe"
+        modprobe ${module} || exit 1
+    fi
 fi
+
+
 major=$(awk "\$2==\"$module\" {print \$1}" /proc/devices)
 rm -f /dev/${device}
 mknod /dev/${device} c $major 0

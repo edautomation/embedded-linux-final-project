@@ -1,10 +1,16 @@
+#include <linux/cdev.h>
+#include <linux/fs.h>  // file_operations
 #include <linux/init.h>
 #include <linux/mod_devicetable.h>
 #include <linux/module.h>
 #include <linux/of_device.h>
 #include <linux/platform_device.h>
+#include <linux/printk.h>
 #include <linux/property.h>
 #include <linux/serdev.h>
+#include <linux/slab.h>
+#include <linux/string.h>
+#include <linux/types.h>
 
 #include "byte_fifo.h"
 
@@ -21,6 +27,42 @@ static struct byte_fifo_t rx_fifo = {
     .data = rx_buffer,
     .size = BUFFER_LENGTH,
 };
+
+// Our driver object
+struct modbus_device_t
+{
+    struct byte_fifo_t* const fifo;
+    struct cdev cdev;  // Char device structure
+};
+static struct modbus_device_t modbus_dev = {
+    .fifo = &rx_fifo,
+};
+
+int modbus_dev_open(struct inode* inode, struct file* filp)
+{
+    struct modbus_device_t* dev = NULL;
+
+    printk("Open modbus char device");
+
+    // Our device is global and persistent -> no need to do any particular device handling.
+    // Only store a pointer to our device in the file structure for ease of access
+
+    // NOTE: struct file represents a file descriptor, whereas struct inode represents the file
+    // itself => there can be multiple struct file representing multiple open descriptors
+    // on a single file, but they all point to the same inode structure.
+    dev = container_of(inode->i_cdev, struct modbus_device_t, cdev);
+    filp->private_data = dev;  // store a pointer to our global device
+
+    return 0;
+}
+
+int modbus_dev_release(struct inode* inode, struct file* filp)
+{
+    printk("Modbus Device Release");
+
+    // Nothing to do here
+    return 0;
+}
 
 /* Declate the probe and remove functions */
 static int serdev_serial_probe(struct serdev_device* serdev);
@@ -97,7 +139,7 @@ static void serdev_serial_remove(struct serdev_device* serdev)
  */
 static int __init my_init(void)
 {
-    printk("serdev_serial - Loading the driver...\n");
+    printk("Serial Modbus - Loading the driver...\n");
     if (serdev_device_driver_register(&serdev_serial_driver))
     {
         printk("serdev_serial - Error! Could not load driver\n");
@@ -114,7 +156,7 @@ static int __init my_init(void)
  */
 static void __exit my_exit(void)
 {
-    printk("serdev_serial - Unload driver");
+    printk("Serial Modbus - Unload driver");
     serdev_device_driver_unregister(&serdev_serial_driver);
 }
 

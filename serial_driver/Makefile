@@ -21,16 +21,10 @@ else
 KERNELDIR ?= /lib/modules/$(shell uname -r)/build
 PWD       := $(shell pwd)
 
-all: modules dt
-
 modules:
 	$(MAKE) -C $(KERNELDIR) M=$(PWD) modules
-
-dt: serdev_overlay.dts
-	dtc -@ -I dts -O dtb -o serdev_overlay.dtbo serdev_overlay.dts
 
 endif
 
 clean:
 	rm -rf *.o *~ core .depend .*.cmd *.ko *.mod.c .tmp_versions
-	rm -rf serdev_overlay.dtbo

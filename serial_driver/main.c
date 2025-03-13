@@ -34,13 +34,11 @@ static struct byte_fifo_t rx_fifo = {
 // Our driver object
 struct modbus_device_t
 {
-    struct byte_fifo_t* const fifo;
+    struct byte_fifo_t* fifo;
     struct serdev_device* serdev;
     struct cdev cdev;  // Char device structure
 };
-static struct modbus_device_t modbus_dev = {
-    .fifo = &rx_fifo,
-};
+static struct modbus_device_t modbus_dev;
 
 int modbus_dev_open(struct inode* inode, struct file* filp)
 {
@@ -239,7 +237,6 @@ static int __init my_init(void)
         printk(KERN_WARNING "Can't get major %d\n", modbus_dev_major);
         return result;
     }
-    memset(&modbus_dev, 0, sizeof(struct modbus_device_t));
 
     printk("Serial Modbus - Loading the serial device driver...\n");
     if (serdev_device_driver_register(&serdev_serial_driver))
@@ -248,12 +245,14 @@ static int __init my_init(void)
         return -1;
     }
 
+    memset(&modbus_dev, 0, sizeof(struct modbus_device_t));
     byte_fifo_init(&rx_fifo);
+    modbus_dev.fifo = &rx_fifo;
 
     result = modbus_dev_setup_cdev(&modbus_dev);
-
     if (result)
     {
+        printk("Serial Modbus - Error setting up device");
         unregister_chrdev_region(dev, 1);
     }
 

@@ -17,16 +17,25 @@
 int byte_fifo_init(struct byte_fifo_t* const fifo)
 {
     RETURN_IF(NULL == fifo, -EFAULT);
+    mutex_init(&fifo->lock);
+
+    byte_fifo_reset(fifo);
+
+    return 0;
+}
+
+int byte_fifo_reset(struct byte_fifo_t* const fifo)
+{
+    RETURN_IF(NULL == fifo, -EFAULT);
     RETURN_IF(NULL == fifo->data, -EFAULT);
     RETURN_IF(0 == fifo->size, -EFAULT);
 
+    mutex_lock(&fifo->lock);
     fifo->write_index = 0U;
     fifo->read_index = 0U;
     fifo->n_elements = 0U;
-
     memset((void*)fifo->data, 0, fifo->size);
-
-    mutex_init(&fifo->lock);
+    mutex_unlock(&fifo->lock);
 
     return 0;
 }

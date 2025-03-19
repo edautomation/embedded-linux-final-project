@@ -183,6 +183,7 @@ ssize_t modbus_dev_read(struct file* filp, char __user* buf, size_t count, loff_
 
     // Actually read from the device
     mutex_lock(&dev->modbus_lock);
+    byte_fifo_reset(dev->fifo);
     nmbs_error err = nmbs_read_holding_registers(&nmbs, start_addr, n_regs, kbuffer);
     mutex_unlock(&dev->modbus_lock);
     if (NMBS_ERROR_NONE != err)

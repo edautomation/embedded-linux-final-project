@@ -4,18 +4,18 @@ DEBUG = y
 
 # Add your debugging flag (or not) to CFLAGS
 ifeq ($(DEBUG),y)
-  DEBFLAGS = -O -g -DSERIAL_DRIVER_DEBUG # "-O" is needed to expand inlines
+  DEBFLAGS = -O -g -DSERIAL_MODBUS_DEBUG -DNMBS_SERVER_DISABLED# "-O" is needed to expand inlines
 else
   DEBFLAGS = -O2
 endif
 
-EXTRA_CFLAGS += $(DEBFLAGS) -std=gnu99
+EXTRA_CFLAGS += $(DEBFLAGS)
 
 ifneq ($(KERNELRELEASE),)
 # call from kernel build system
-obj-m	:= serial_driver.o
-serial_driver-y := byte_fifo.o main.o
-ccflags-y :=  -Wno-declaration-after-statement
+obj-m	:= serial_modbus.o
+serial_modbus-y := byte_fifo.o nanomodbus.o main.o
+ccflags-y := -std=gnu99 -Wno-declaration-after-statement -Wno-vla
 else
 
 KERNELDIR ?= /lib/modules/$(shell uname -r)/build

@@ -1,6 +1,6 @@
 #!/bin/sh
-module=serial_driver
-device=serial_driver
+module=serial_modbus
+device=serial_modbus
 cd `dirname $0`
 # invoke rmmod with all arguments we got
 rmmod $module || exit 1

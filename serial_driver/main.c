@@ -26,10 +26,7 @@ int modbus_dev_major = 0;  // use dynamic major
 int modbus_dev_minor = 0;
 
 #define BUFFER_LENGTH 256
-#define MODBUS_N_REGS 4
-
-// Modbus registers mirror
-static uint16_t regs[MODBUS_N_REGS];
+#define UINT16_MAX    65535
 
 // nanomodbus handle
 static nmbs_t nmbs;
@@ -50,6 +47,13 @@ struct modbus_device_t
     struct cdev cdev;  // Char device structure
 };
 static struct modbus_device_t modbus_dev;
+
+// Private file data
+struct modbus_handle_t
+{
+    uint16_t start_address;
+    struct modbus_device_t* dev;
+};
 
 int32_t read_serial(uint8_t* buf, uint16_t count, int32_t byte_timeout_ms, void* arg)
 {
@@ -115,6 +119,7 @@ nmbs_error init_modbus_client(nmbs_t* nmbs)
 int modbus_dev_open(struct inode* inode, struct file* filp)
 {
     struct modbus_device_t* dev = NULL;
+    struct modbus_handle_t* modbus_handle = NULL;
 
     printk("Open modbus char device");
 
@@ -125,7 +130,17 @@ int modbus_dev_open(struct inode* inode, struct file* filp)
     // itself => there can be multiple struct file representing multiple open descriptors
     // on a single file, but they all point to the same inode structure.
     dev = container_of(inode->i_cdev, struct modbus_device_t, cdev);
-    filp->private_data = dev;  // store a pointer to our global device
+
+    modbus_handle = kmalloc(sizeof(struct modbus_handle_t), GFP_KERNEL);
+    if (NULL == modbus_handle)
+    {
+        return -ENOMEM;
+    }
+
+    // Each "file" will have a different start address for read/write operations
+    modbus_handle->start_address = 0;
+    modbus_handle->dev = dev;  // store a pointer to our global device
+    filp->private_data = modbus_handle;
 
     return 0;
 }
@@ -134,93 +149,109 @@ int modbus_dev_release(struct inode* inode, struct file* filp)
 {
     printk("Modbus Device Release");
 
-    // Nothing to do here
+    kfree(filp->private_data);  // Release the data structure created in the open function
+
     return 0;
 }
 
 ssize_t modbus_dev_read(struct file* filp, char __user* buf, size_t count, loff_t* f_pos)
 {
-    struct modbus_device_t* dev = filp->private_data;
-    struct byte_fifo_t* fifo = dev->fifo;
+    struct modbus_handle_t* handle = filp->private_data;
+    struct modbus_device_t* dev = handle->dev;
 
-    if ((NULL == dev) || (NULL == fifo))
+    if ((NULL == dev) || (NULL == buf))
     {
         return -EFAULT;
     }
 
-    char* kbuffer = kmalloc(BUFFER_LENGTH, GFP_KERNEL);
+    // Check parameters
+    const uint16_t start_addr = handle->start_address;
+    const size_t n_regs = count / 2;           // Modbus registers are 16-bit, count is the number of bytes
+    if ((start_addr + n_regs > UINT16_MAX) ||  // Modbus address space limit
+        (n_regs > 125))                        // max 250 bytes of data per transaction
+    {
+        printk("Modbus device - Invalid parameters for read (start address or count)");
+        return -EINVAL;
+    }
+
+    const size_t buffer_size = n_regs * sizeof(uint16_t);
+    uint16_t* kbuffer = kmalloc(buffer_size, GFP_KERNEL);
     if (NULL == kbuffer)
     {
         return -ENOMEM;
     }
 
-    // Dummy response
-    sprintf(kbuffer, "Reg[0]=%u\nReg[1]=%u\nReg[2]=%u\nReg[3]=%u\0", regs[0], regs[1], regs[2], regs[3]);
-    printk("Formatted read response: %s", kbuffer);
-
-    if (copy_to_user(buf, kbuffer, strlen(kbuffer)) > 0)
+    // Actually read from the device
+    mutex_lock(&dev->modbus_lock);
+    nmbs_error err = nmbs_read_holding_registers(&nmbs, start_addr, n_regs, kbuffer);
+    mutex_unlock(&dev->modbus_lock);
+    if (NMBS_ERROR_NONE != err)
     {
+        printk("Modbus device - Could not read holding registers");
         kfree(kbuffer);
-        return -EFAULT;
-    }
-    kfree(kbuffer);
-
-    return 0;
-}
-
-ssize_t modbus_dev_write(struct file* filp, const char __user* buf, size_t count, loff_t* f_pos)
-{
-    struct modbus_device_t* dev = dev = filp->private_data;
-    struct serdev_device* serdev = serdev = dev->serdev;
-
-    if ((NULL == dev) || (NULL == serdev))
-    {
-        return -EFAULT;
+        return -EIO;
     }
 
-    char* kbuffer = kmalloc(count, GFP_KERNEL);
-    if (NULL == kbuffer)
-    {
-        printk("Modbus device - Could not allocate memory");
-        return -ENOMEM;
-    }
-
-    // We will manipulate memory in the kernel space
-    if (copy_from_user(kbuffer, buf, count))
+    // Get data back to user space
+    if (copy_to_user(buf, kbuffer, buffer_size) > 0)
     {
         printk("Modbus device - Could not copy from user space!");
         kfree(kbuffer);
         return -EFAULT;
     }
 
-    nmbs_error ret = NMBS_ERROR_NONE;
-    if (kbuffer[0] == 'r')
+    kfree(kbuffer);
+    return 0;  // Here we read everything -> return EOF
+}
+
+ssize_t modbus_dev_write(struct file* filp, const char __user* buf, size_t count, loff_t* f_pos)
+{
+    struct modbus_handle_t* handle = filp->private_data;
+    struct modbus_device_t* dev = handle->dev;
+
+    if ((NULL == dev) || (NULL == buf))
     {
-        printk("Modbus device - Read registers");
-        mutex_lock(&dev->modbus_lock);
-        ret = nmbs_read_holding_registers(&nmbs, 0, 4, regs);
-        mutex_unlock(&dev->modbus_lock);
+        return -EFAULT;
     }
-    else if (kbuffer[0] == 'w')
+
+    // Check parameters
+    const uint16_t start_addr = handle->start_address;
+    const size_t n_regs = count / 2;           // Modbus registers are 16-bit, count is the number of bytes
+    if ((start_addr + n_regs > UINT16_MAX) ||  // Modbus address space limit
+        (n_regs > 125))                        // max 250 bytes of data per transaction
     {
-        printk("Modbus device - Write registers");
-        mutex_lock(&dev->modbus_lock);
-        ret = nmbs_write_multiple_registers(&nmbs, 0, 4, regs);
-        mutex_unlock(&dev->modbus_lock);
+        printk("Modbus device - Invalid parameters for write (start address or count)");
+        return -EINVAL;
     }
-    else
+
+    const size_t buffer_size = n_regs * sizeof(uint16_t);
+    uint16_t* kbuffer = kmalloc(buffer_size, GFP_KERNEL);
+    if (NULL == kbuffer)
     {
-        printk("Modbus device - Unrecognized command");
+        return -ENOMEM;
     }
+
+    // We will manipulate memory in the kernel space
+    if (copy_from_user(kbuffer, buf, buffer_size))
+    {
+        printk("Modbus device - Could not copy from user space!");
+        kfree(kbuffer);
+        return -EFAULT;
+    }
+
+    mutex_lock(&dev->modbus_lock);
+    nmbs_error err = nmbs_write_multiple_registers(&nmbs, start_addr, n_regs, kbuffer);
+    mutex_unlock(&dev->modbus_lock);
+
     kfree(kbuffer);
 
-    if (NMBS_ERROR_NONE != ret)
+    if (NMBS_ERROR_NONE != err)
     {
-        printk("Modbus device - Error reading or writing registers");
+        printk("Modbus device - Error writing registers");
         return -ENODEV;
     }
 
-    return count;
+    return count;  // Here we wrote everything we wanted
 }
 
 struct file_operations modbus_dev_fops = {
@@ -271,7 +302,7 @@ static struct serdev_device_driver serdev_serial_driver = {
 // Callback is called whenever a character is received
 static int serdev_serial_recv(struct serdev_device* serdev, const unsigned char* buffer, size_t size)
 {
-    printk("serdev_serial - Received %ld bytes with \"%s\"\n", size, buffer);
+    printk("serdev_serial - Received %ld bytes with \n", size);
 
     int res = byte_fifo_write(&rx_fifo, buffer, size);
     if (res > 0)
@@ -359,7 +390,6 @@ static int __init my_init(void)
     modbus_dev.fifo = &rx_fifo;
     mutex_init(&modbus_dev.modbus_lock);
 
-    memset(&regs, 0, sizeof(regs));
     nmbs_error status = init_modbus_client(&nmbs);
     if (NMBS_ERROR_NONE != status)
     {

@@ -187,7 +187,7 @@ ssize_t modbus_dev_read(struct file* filp, char __user* buf, size_t count, loff_
     mutex_unlock(&dev->modbus_lock);
     if (NMBS_ERROR_NONE != err)
     {
-        printk("Modbus device - Could not read holding registers");
+        printk("Modbus device - Could not read holding registers. Error: %d", err);
         kfree(kbuffer);
         return -EIO;
     }
@@ -201,7 +201,7 @@ ssize_t modbus_dev_read(struct file* filp, char __user* buf, size_t count, loff_
     }
 
     kfree(kbuffer);
-    return 0;  // Here we read everything -> return EOF
+    return count;  // Here we read everything at once
 }
 
 ssize_t modbus_dev_write(struct file* filp, const char __user* buf, size_t count, loff_t* f_pos)
@@ -247,7 +247,7 @@ ssize_t modbus_dev_write(struct file* filp, const char __user* buf, size_t count
 
     if (NMBS_ERROR_NONE != err)
     {
-        printk("Modbus device - Error writing registers");
+        printk("Modbus device - Error writing registers: %d", err);
         return -ENODEV;
     }
 
@@ -302,12 +302,12 @@ static struct serdev_device_driver serdev_serial_driver = {
 // Callback is called whenever a character is received
 static int serdev_serial_recv(struct serdev_device* serdev, const unsigned char* buffer, size_t size)
 {
-    printk("serdev_serial - Received %ld bytes with \n", size);
+    printk("serdev_serial - Received %ld bytes \n", size);
 
     int res = byte_fifo_write(&rx_fifo, buffer, size);
     if (res > 0)
     {
-        printk("serdev_serial - Overwrote %d bytes", res);
+        printk("serdev_serial - Overwrote %d bytes in fifo", res);
     }
     else if (res < 0)
     {
@@ -315,7 +315,7 @@ static int serdev_serial_recv(struct serdev_device* serdev, const unsigned char*
     }
     else
     {
-        printk("serdev_serial - Write %lu bytes", size);
+        printk("serdev_serial - Write %lu bytes to fifo", size);
     }
 
     return size;

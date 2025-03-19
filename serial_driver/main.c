@@ -155,7 +155,7 @@ ssize_t modbus_dev_read(struct file* filp, char __user* buf, size_t count, loff_
     }
 
     // Dummy response
-    sprintf(kbuffer, "Reg[0]=%u\nReg[1]=%u\nReg[2]=%u\nReg[3]=%u", regs[0], regs[1], regs[2], regs[3]);
+    sprintf(kbuffer, "Reg[0]=%u\nReg[1]=%u\nReg[2]=%u\nReg[3]=%u\0", regs[0], regs[1], regs[2], regs[3]);
     printk("Formatted read response: %s", kbuffer);
 
     if (copy_to_user(buf, kbuffer, strlen(kbuffer)) > 0)
@@ -165,7 +165,7 @@ ssize_t modbus_dev_read(struct file* filp, char __user* buf, size_t count, loff_
     }
     kfree(kbuffer);
 
-    return count;
+    return 0;
 }
 
 ssize_t modbus_dev_write(struct file* filp, const char __user* buf, size_t count, loff_t* f_pos)

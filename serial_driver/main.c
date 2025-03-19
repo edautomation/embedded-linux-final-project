@@ -26,6 +26,13 @@ int modbus_dev_major = 0;  // use dynamic major
 int modbus_dev_minor = 0;
 
 #define BUFFER_LENGTH 256
+#define MODBUS_N_REGS 4
+
+// Modbus registers mirror
+static uint16_t regs[MODBUS_N_REGS];
+
+// nanomodbus handle
+static nmbs_t nmbs;
 
 // Synchronization fifo
 static unsigned char rx_buffer[BUFFER_LENGTH];
@@ -39,6 +46,7 @@ struct modbus_device_t
 {
     struct byte_fifo_t* fifo;
     struct serdev_device* serdev;
+    struct mutex modbus_lock;
     struct cdev cdev;  // Char device structure
 };
 static struct modbus_device_t modbus_dev;
@@ -140,26 +148,24 @@ ssize_t modbus_dev_read(struct file* filp, char __user* buf, size_t count, loff_
         return -EFAULT;
     }
 
-    char* kbuffer = kmalloc(count, GFP_KERNEL);
+    char* kbuffer = kmalloc(BUFFER_LENGTH, GFP_KERNEL);
     if (NULL == kbuffer)
     {
         return -ENOMEM;
     }
 
-    int read_bytes = byte_fifo_read(fifo, kbuffer, count);
-    printk("Read %d bytes from fifo", read_bytes);
+    // Dummy response
+    sprintf(kbuffer, "Reg[0]=%u\nReg[1]=%u\nReg[2]=%u\nReg[3]=%u", regs[0], regs[1], regs[2], regs[3]);
+    printk("Formatted read response: %s", kbuffer);
 
-    if (read_bytes > 0)
+    if (copy_to_user(buf, kbuffer, strlen(kbuffer)) > 0)
     {
-        if (copy_to_user(buf, kbuffer, read_bytes) > 0)
-        {
-            return -EFAULT;
-        }
+        kfree(kbuffer);
+        return -EFAULT;
     }
-
     kfree(kbuffer);
 
-    return read_bytes;
+    return count;
 }
 
 ssize_t modbus_dev_write(struct file* filp, const char __user* buf, size_t count, loff_t* f_pos)
@@ -187,11 +193,34 @@ ssize_t modbus_dev_write(struct file* filp, const char __user* buf, size_t count
         return -EFAULT;
     }
 
-    int status = serdev_device_write_buf(serdev, kbuffer, count);
-    printk("serdev_serial - Wrote %d bytes.\n", status);
+    nmbs_error ret = NMBS_ERROR_NONE;
+    if (kbuffer[0] == 'r')
+    {
+        printk("Modbus device - Read registers");
+        mutex_lock(&dev->modbus_lock);
+        ret = nmbs_read_holding_registers(&nmbs, 0, 4, regs);
+        mutex_unlock(&dev->modbus_lock);
+    }
+    else if (kbuffer[0] == 'w')
+    {
+        printk("Modbus device - Write registers");
+        mutex_lock(&dev->modbus_lock);
+        ret = nmbs_write_multiple_registers(&nmbs, 0, 4, regs);
+        mutex_unlock(&dev->modbus_lock);
+    }
+    else
+    {
+        printk("Modbus device - Unrecognized command");
+    }
     kfree(kbuffer);
 
-    return status;
+    if (NMBS_ERROR_NONE != ret)
+    {
+        printk("Modbus device - Error reading or writing registers");
+        return -ENODEV;
+    }
+
+    return count;
 }
 
 struct file_operations modbus_dev_fops = {
@@ -285,9 +314,9 @@ static int serdev_serial_probe(struct serdev_device* serdev)
     serdev_device_set_flow_control(serdev, false);
     serdev_device_set_parity(serdev, SERDEV_PARITY_NONE);
 
-    status = serdev_device_write_buf(serdev, "Hello, from serdev", sizeof("Hello, from serdev"));
-    printk("serdev_serial - Wrote %d bytes.\n", status);
+    // Here we could read the device identification
 
+    // Store a pointer to the serial device so we can write to it later
     modbus_dev.serdev = serdev;
 
     return 0;
@@ -328,6 +357,16 @@ static int __init my_init(void)
     memset(&modbus_dev, 0, sizeof(struct modbus_device_t));
     byte_fifo_init(&rx_fifo);
     modbus_dev.fifo = &rx_fifo;
+    mutex_init(&modbus_dev.modbus_lock);
+
+    memset(&regs, 0, sizeof(regs));
+    nmbs_error status = init_modbus_client(&nmbs);
+    if (NMBS_ERROR_NONE != status)
+    {
+        printk("Serial Modbus - Error initializing nanomodbus");
+        return -ENODEV;
+    }
+    nmbs_set_destination_rtu_address(&nmbs, 0x01);
 
     result = modbus_dev_setup_cdev(&modbus_dev);
     if (result)

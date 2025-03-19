@@ -1,6 +1,8 @@
 #include <linux/cdev.h>
+#include <linux/delay.h>
 #include <linux/fs.h>  // file_operations
 #include <linux/init.h>
+#include <linux/jiffies.h>
 #include <linux/mod_devicetable.h>
 #include <linux/module.h>
 #include <linux/of_device.h>
@@ -13,11 +15,12 @@
 #include <linux/types.h>
 
 #include "byte_fifo.h"
+#include "nanomodbus.h"
 
 // Meta Information
 MODULE_LICENSE("GPL");
 MODULE_AUTHOR("Emile Decosterd");
-MODULE_DESCRIPTION("Simple char driver using a serial device");
+MODULE_DESCRIPTION("Simple RTU modbus driver");
 
 int modbus_dev_major = 0;  // use dynamic major
 int modbus_dev_minor = 0;
@@ -39,6 +42,67 @@ struct modbus_device_t
     struct cdev cdev;  // Char device structure
 };
 static struct modbus_device_t modbus_dev;
+
+int32_t read_serial(uint8_t* buf, uint16_t count, int32_t byte_timeout_ms, void* arg)
+{
+    (void)arg;  // unused
+
+    if (NULL == buf)
+    {
+        return -EFAULT;
+    }
+
+    // Wait until we received something
+    unsigned long timestamp_now = jiffies;
+    unsigned long timestamp_timeout = timestamp_now + ((byte_timeout_ms * HZ) / 1000);  // no check for overflow, I know
+    while (!byte_fifo_is_available(&rx_fifo) && (jiffies < timestamp_timeout))
+    {
+        msleep(10);
+    }
+    if (jiffies >= timestamp_timeout)
+    {
+        return -ETIMEDOUT;
+    }
+
+    return byte_fifo_read(&rx_fifo, buf, count);
+}
+
+int32_t write_serial(const uint8_t* buf, uint16_t count, int32_t byte_timeout_ms, void* arg)
+{
+    (void)arg;  // unused
+
+    struct serdev_device* serdev = modbus_dev.serdev;
+    if ((NULL == serdev) || (NULL == buf))
+    {
+        return -EFAULT;
+    }
+
+    int status = serdev_device_write_buf(serdev, buf, count);
+    printk("serdev_serial - Wrote %d bytes.\n", status);
+
+    return status;
+}
+
+nmbs_error init_modbus_client(nmbs_t* nmbs)
+{
+    nmbs_platform_conf conf;
+
+    nmbs_platform_conf_create(&conf);
+    conf.transport = NMBS_TRANSPORT_RTU;
+    conf.read = read_serial;
+    conf.write = write_serial;
+
+    nmbs_error status = nmbs_client_create(nmbs, &conf);
+    if (status != NMBS_ERROR_NONE)
+    {
+        return status;
+    }
+
+    nmbs_set_byte_timeout(nmbs, 100);
+    nmbs_set_read_timeout(nmbs, 1000);
+
+    return NMBS_ERROR_NONE;
+}
 
 int modbus_dev_open(struct inode* inode, struct file* filp)
 {

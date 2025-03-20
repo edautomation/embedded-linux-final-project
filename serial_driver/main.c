@@ -27,6 +27,7 @@ int modbus_dev_minor = 0;
 
 #define BUFFER_LENGTH 256
 #define UINT16_MAX    65535
+#define INT32_MAX     2147483647
 
 // nanomodbus handle
 static nmbs_t nmbs;
@@ -64,19 +65,27 @@ int32_t read_serial(uint8_t* buf, uint16_t count, int32_t byte_timeout_ms, void*
         return -EFAULT;
     }
 
+    if (byte_timeout_ms >= (INT32_MAX / HZ))
+    {
+        return -EINVAL;
+    }
+
     // Wait until we received something
     unsigned long timestamp_now = jiffies;
-    unsigned long timestamp_timeout = timestamp_now + ((byte_timeout_ms * HZ) / 1000);  // no check for overflow, I know
-    while (!byte_fifo_is_available(&rx_fifo) && (jiffies < timestamp_timeout))
+    unsigned long timestamp_timeout = timestamp_now + ((byte_timeout_ms * HZ) / 1000);
+    uint16_t read_bytes = 0;
+    while ((read_bytes < count) && (jiffies < timestamp_timeout))
     {
-        msleep(10);
+        uint16_t bytes_left_to_read = count - read_bytes;
+        read_bytes += byte_fifo_read(&rx_fifo, buf, bytes_left_to_read);
     }
     if (jiffies >= timestamp_timeout)
     {
+        printk("nanomodbus - Read serial timed out");
         return -ETIMEDOUT;
     }
 
-    return byte_fifo_read(&rx_fifo, buf, count);
+    return (int32_t)read_bytes;
 }
 
 int32_t write_serial(const uint8_t* buf, uint16_t count, int32_t byte_timeout_ms, void* arg)
@@ -90,7 +99,7 @@ int32_t write_serial(const uint8_t* buf, uint16_t count, int32_t byte_timeout_ms
     }
 
     int status = serdev_device_write_buf(serdev, buf, count);
-    printk("serdev_serial - Wrote %d bytes.\n", status);
+    printk("nanomodbus - Wrote %d bytes.\n", status);
 
     return status;
 }
@@ -183,7 +192,6 @@ ssize_t modbus_dev_read(struct file* filp, char __user* buf, size_t count, loff_
 
     // Actually read from the device
     mutex_lock(&dev->modbus_lock);
-    byte_fifo_reset(dev->fifo);
     nmbs_error err = nmbs_read_holding_registers(&nmbs, start_addr, n_regs, kbuffer);
     mutex_unlock(&dev->modbus_lock);
     if (NMBS_ERROR_NONE != err)

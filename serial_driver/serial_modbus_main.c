@@ -16,6 +16,7 @@
 
 #include "byte_fifo.h"
 #include "nanomodbus.h"
+#include "serial_modbus_ioctl.h"
 
 // Meta Information
 MODULE_LICENSE("GPL");
@@ -65,20 +66,32 @@ int32_t read_serial(uint8_t* buf, uint16_t count, int32_t byte_timeout_ms, void*
         return -EFAULT;
     }
 
+    // Check for overflow and compute timeout
     if (byte_timeout_ms >= (INT32_MAX / HZ))
     {
         return -EINVAL;
     }
-
-    // Wait until we received something
     unsigned long timestamp_now = jiffies;
     unsigned long timestamp_timeout = timestamp_now + ((byte_timeout_ms * HZ) / 1000);
+
+    // Get data from queue. It might be filled asynchronously, so keep reading until
+    // all expected bytes were read or a timeout occured.
     uint16_t read_bytes = 0;
     while ((read_bytes < count) && (jiffies < timestamp_timeout))
     {
         uint16_t bytes_left_to_read = count - read_bytes;
-        read_bytes += byte_fifo_read(&rx_fifo, buf, bytes_left_to_read);
+        int16_t res = byte_fifo_read(&rx_fifo, buf, bytes_left_to_read);
+        if (res >= 0)
+        {
+            read_bytes += res;
+        }
+        else
+        {
+            return -EFAULT;
+        }
     }
+
+    // Result check
     if (jiffies >= timestamp_timeout)
     {
         printk("nanomodbus - Read serial timed out");
@@ -263,12 +276,40 @@ ssize_t modbus_dev_write(struct file* filp, const char __user* buf, size_t count
     return count;  // Here we wrote everything we wanted
 }
 
+ssize_t modbus_dev_ioctl(struct file* filp, unsigned int cmd, unsigned long arg)
+{
+    struct modbus_handle_t* handle = filp->private_data;
+    unsigned long new_address = 0;
+
+    // Check if command is supported
+    if (SERIAL_MODBUSCHAR_IOCSETADDR != cmd)
+    {
+        return -ENOTTY;
+    }
+
+    // We are working in the kernel space -> need to copy memory
+    if (copy_from_user(&new_address, (void __user*)arg, sizeof(unsigned long)))
+    {
+        return -EFAULT;
+    }
+
+    // Sanity check of provided value
+    if (new_address >= UINT16_MAX)
+    {
+        return -EINVAL;
+    }
+
+    // Actual purpose of the ioctl call
+    handle->start_address = new_address;
+
+    return 0;
+}
+
 struct file_operations modbus_dev_fops = {
     .owner = THIS_MODULE,
     .read = modbus_dev_read,
     .write = modbus_dev_write,
-    // .llseek = modbus_dev_seek,
-    // .unlocked_ioctl = modbus_dev_ioctl,
+    .unlocked_ioctl = modbus_dev_ioctl,
     .open = modbus_dev_open,
     .release = modbus_dev_release,
 };

@@ -276,7 +276,7 @@ ssize_t modbus_dev_write(struct file* filp, const char __user* buf, size_t count
     return count;  // Here we wrote everything we wanted
 }
 
-ssize_t modbus_dev_ioctl(struct file* filp, unsigned int cmd, unsigned long arg)
+long int modbus_dev_ioctl(struct file* filp, unsigned int cmd, unsigned long arg)
 {
     struct modbus_handle_t* handle = filp->private_data;
     unsigned long new_address = 0;
@@ -352,7 +352,7 @@ static struct serdev_device_driver serdev_serial_driver = {
 // Callback is called whenever a character is received
 static int serdev_serial_recv(struct serdev_device* serdev, const unsigned char* buffer, size_t size)
 {
-    printk("serdev_serial - Received %ld bytes \n", size);
+    printk("serdev_serial - Received %u bytes \n", size);
 
     int res = byte_fifo_write(&rx_fifo, buffer, size);
     if (res > 0)
@@ -365,7 +365,7 @@ static int serdev_serial_recv(struct serdev_device* serdev, const unsigned char*
     }
     else
     {
-        printk("serdev_serial - Write %lu bytes to fifo", size);
+        printk("serdev_serial - Write %u bytes to fifo", size);
     }
 
     return size;

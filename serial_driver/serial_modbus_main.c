@@ -94,6 +94,7 @@ int32_t read_serial(uint8_t* buf, uint16_t count, int32_t byte_timeout_ms, void*
             printk("nanomodbus - Error reading bytes from fifo: %d", res);
             return -EFAULT;
         }
+        msleep(10);
     }
 
     // Result check
@@ -139,8 +140,8 @@ nmbs_error init_modbus_client(nmbs_t* nmbs)
         return status;
     }
 
-    nmbs_set_byte_timeout(nmbs, 1100);
-    nmbs_set_read_timeout(nmbs, 2000);
+    nmbs_set_byte_timeout(nmbs, 100);
+    nmbs_set_read_timeout(nmbs, 1000);
 
     return NMBS_ERROR_NONE;
 }

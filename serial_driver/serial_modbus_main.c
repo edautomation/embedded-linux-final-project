@@ -12,6 +12,7 @@
 #include <linux/serdev.h>
 #include <linux/slab.h>
 #include <linux/string.h>
+#include <linux/timekeeping.h>
 #include <linux/types.h>
 
 #include "byte_fifo.h"
@@ -72,19 +73,15 @@ int32_t read_serial(uint8_t* buf, uint16_t count, int32_t byte_timeout_ms, void*
         return byte_fifo_reset(&rx_fifo);
     }
 
-    // Check for overflow and compute timeout
-    // printk("nanomodbus - Time to receive %u byte(s): %ld", count, byte_timeout_ms);
-    if (byte_timeout_ms >= (INT32_MAX / HZ))
-    {
-        return -EINVAL;
-    }
-    unsigned long timestamp_now = jiffies;
-    unsigned long timestamp_timeout = timestamp_now + ((byte_timeout_ms * HZ) / 1000);
+    // Compute timeout
+    uint64_t timestamp_now = ktime_get_ns();
+    uint64_t timeout_ns = ((uint64_t)byte_timeout_ms) * ((uint64_t)1000000);
+    uint64_t timestamp_timeout = timestamp_now + timeout_ns;
 
     // Get data from queue. It might be filled asynchronously, so keep reading until
     // all expected bytes were read or a timeout occured.
     uint16_t read_bytes = 0;
-    while ((read_bytes < count) && (jiffies < timestamp_timeout))
+    while ((read_bytes < count) && (ktime_get_ns() < timestamp_timeout))
     {
         uint16_t bytes_left_to_read = count - read_bytes;
         int16_t res = byte_fifo_read(&rx_fifo, buf, bytes_left_to_read);
@@ -100,10 +97,9 @@ int32_t read_serial(uint8_t* buf, uint16_t count, int32_t byte_timeout_ms, void*
     }
 
     // Result check
-    unsigned long timestamps_stop = jiffies;
-    if (timestamps_stop > timestamp_timeout)
+    if (ktime_get_ns() > timestamp_timeout)
     {
-        printk("nanomodbus - Read serial timed out (read %d bytes). Timestamp start: %lu, timestamp stop: %lu", read_bytes, timestamp_now, timestamps_stop);
+        printk("nanomodbus - Read serial timed out (read %d bytes). Timestamp start: %llu, timestamp stop: %llu", read_bytes, timestamp_now, timestamps_stop);
         return -ETIMEDOUT;
     }
 

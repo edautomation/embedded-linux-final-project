@@ -66,8 +66,14 @@ int32_t read_serial(uint8_t* buf, uint16_t count, int32_t byte_timeout_ms, void*
         return -EFAULT;
     }
 
+    // Clear fifo and return immediately when timeout is zero
+    if (0 == byte_timeout_ms)
+    {
+        return byte_fifo_reset(&rx_fifo);
+    }
+
     // Check for overflow and compute timeout
-    printk("nanomodbus - Time to receive %u bytes: %ld", count, byte_timeout_ms);
+    printk("nanomodbus - Time to receive %u byte(s): %ld", count, byte_timeout_ms);
     if (byte_timeout_ms >= (INT32_MAX / HZ))
     {
         return -EINVAL;

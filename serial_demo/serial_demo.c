@@ -171,6 +171,10 @@ int main(int argc, char* argv[])
     write_to_modbus(fd, buf, n_regs);
     LOG_DEBUG("Done! \n");
 
+    LOG_DEBUG(">> Setting address back to zero.. \n");
+    set_modbus_address(fd, 0);
+    LOG_DEBUG("Done! \n");
+
     LOG_DEBUG(">> Reading 16 registers.. \n");
     n_regs = 16;
     read_from_modbus(fd, buf, n_regs);

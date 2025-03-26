@@ -94,7 +94,7 @@ int32_t read_serial(uint8_t* buf, uint16_t count, int32_t byte_timeout_ms, void*
             printk("nanomodbus - Error reading bytes from fifo: %d", res);
             return -EFAULT;
         }
-        msleep(10);
+        msleep(10);  // Needed so fifo can be written elsewhere (mutex)
     }
 
     // Result check

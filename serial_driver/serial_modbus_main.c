@@ -97,9 +97,10 @@ int32_t read_serial(uint8_t* buf, uint16_t count, int32_t byte_timeout_ms, void*
     }
 
     // Result check
-    if (ktime_get_ns() > timestamp_timeout)
+    uint64_t timestamp_stop = ktime_get_ns();
+    if (timestamp_stop > timestamp_timeout)
     {
-        printk("nanomodbus - Read serial timed out (read %d bytes). Timestamp start: %llu, timestamp stop: %llu", read_bytes, timestamp_now, timestamps_stop);
+        printk("nanomodbus - Read serial timed out (read %d bytes). Timestamp start: %llu, timestamp stop: %llu", read_bytes, timestamp_now, timestamp_stop);
         return -ETIMEDOUT;
     }
 

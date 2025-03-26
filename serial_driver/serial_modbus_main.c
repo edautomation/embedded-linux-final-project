@@ -73,7 +73,7 @@ int32_t read_serial(uint8_t* buf, uint16_t count, int32_t byte_timeout_ms, void*
     }
 
     // Check for overflow and compute timeout
-    printk("nanomodbus - Time to receive %u byte(s): %ld", count, byte_timeout_ms);
+    // printk("nanomodbus - Time to receive %u byte(s): %ld", count, byte_timeout_ms);
     if (byte_timeout_ms >= (INT32_MAX / HZ))
     {
         return -EINVAL;
@@ -94,7 +94,7 @@ int32_t read_serial(uint8_t* buf, uint16_t count, int32_t byte_timeout_ms, void*
         }
         else
         {
-            printk("nanodmodbus - Error reading bytes from fifo: %d", res);
+            printk("nanomodbus - Error reading bytes from fifo: %d", res);
             return -EFAULT;
         }
     }
@@ -107,6 +107,7 @@ int32_t read_serial(uint8_t* buf, uint16_t count, int32_t byte_timeout_ms, void*
         return -ETIMEDOUT;
     }
 
+    printk("nanomodbus - Read %d bytes from fifo", read_bytes);
     return (int32_t)read_bytes;
 }
 

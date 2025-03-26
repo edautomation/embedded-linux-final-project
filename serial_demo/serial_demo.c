@@ -186,5 +186,7 @@ int main(int argc, char* argv[])
     read_from_modbus(fd, buf, n_regs);
     LOG_DEBUG("Done! \n");
 
-    return 0;
+    cleanup();
+
+    return EXIT_SUCCESS;
 }

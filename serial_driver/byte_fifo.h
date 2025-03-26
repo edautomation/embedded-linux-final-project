@@ -2,6 +2,7 @@
 #define BYTE_FIFO_H_
 
 #include <linux/mutex.h>
+#include <linux/types.h>
 
 #ifdef __cplusplus
 extern "C" {
@@ -17,10 +18,11 @@ struct byte_fifo_t
     struct mutex lock;
 };
 
-int byte_fifo_init(struct byte_fifo_t* const fifo);
-int byte_fifo_is_available(struct byte_fifo_t* const fifo);
-int byte_fifo_write(struct byte_fifo_t* const fifo, const unsigned char* const bytes, unsigned int len);
-int byte_fifo_read(struct byte_fifo_t* const fifo, unsigned char* const buffer, unsigned int max_len);
+int16_t byte_fifo_init(struct byte_fifo_t* const fifo);
+int16_t byte_fifo_is_available(struct byte_fifo_t* const fifo);
+int16_t byte_fifo_write(struct byte_fifo_t* const fifo, const unsigned char* const bytes, unsigned int len);
+int16_t byte_fifo_read(struct byte_fifo_t* const fifo, unsigned char* const buffer, unsigned int max_len);
+int16_t byte_fifo_reset(struct byte_fifo_t* const fifo);
 
 #ifdef __cplusplus
 }

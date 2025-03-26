@@ -1,37 +1,38 @@
 #include "byte_fifo.h"
 
-#ifdef __KERNEL__
 #include <linux/errno.h>
 #include <linux/string.h>
-#include <linux/types.h>
-#else
-#include <errno.h>
-#include <stdbool.h>
-#include <stddef.h>  // size_t
-#include <stdint.h>  // uintx_t
-#endif
 
 #define RETURN_IF(x, y) \
     if ((x)) return (y)
 
-int byte_fifo_init(struct byte_fifo_t* const fifo)
+int16_t byte_fifo_init(struct byte_fifo_t* const fifo)
+{
+    RETURN_IF(NULL == fifo, -EFAULT);
+    mutex_init(&fifo->lock);
+
+    byte_fifo_reset(fifo);
+
+    return 0;
+}
+
+int16_t byte_fifo_reset(struct byte_fifo_t* const fifo)
 {
     RETURN_IF(NULL == fifo, -EFAULT);
     RETURN_IF(NULL == fifo->data, -EFAULT);
     RETURN_IF(0 == fifo->size, -EFAULT);
 
+    mutex_lock(&fifo->lock);
     fifo->write_index = 0U;
     fifo->read_index = 0U;
     fifo->n_elements = 0U;
-
     memset((void*)fifo->data, 0, fifo->size);
-
-    mutex_init(&fifo->lock);
+    mutex_unlock(&fifo->lock);
 
     return 0;
 }
 
-int byte_fifo_is_available(struct byte_fifo_t* const fifo)
+int16_t byte_fifo_is_available(struct byte_fifo_t* const fifo)
 {
     RETURN_IF(NULL == fifo, -EFAULT);
 
@@ -42,7 +43,7 @@ int byte_fifo_is_available(struct byte_fifo_t* const fifo)
     return is_available;
 }
 
-int byte_fifo_write(struct byte_fifo_t* const fifo, const unsigned char* const bytes, unsigned int len)
+int16_t byte_fifo_write(struct byte_fifo_t* const fifo, const unsigned char* const bytes, unsigned int len)
 {
     RETURN_IF(NULL == fifo, -EFAULT);
     RETURN_IF(NULL == fifo->data, -EFAULT);
@@ -77,7 +78,7 @@ int byte_fifo_write(struct byte_fifo_t* const fifo, const unsigned char* const b
     return n_bytes_overwritten;
 }
 
-int byte_fifo_read(struct byte_fifo_t* const fifo, unsigned char* const buffer, unsigned int max_len)
+int16_t byte_fifo_read(struct byte_fifo_t* const fifo, unsigned char* const buffer, unsigned int max_len)
 {
     RETURN_IF(NULL == fifo, -EFAULT);
     RETURN_IF(NULL == fifo->data, -EFAULT);

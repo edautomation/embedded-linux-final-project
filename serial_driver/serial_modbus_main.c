@@ -107,7 +107,7 @@ int32_t read_serial(uint8_t* buf, uint16_t count, int32_t byte_timeout_ms, void*
         return -ETIMEDOUT;
     }
 
-    printk("nanomodbus - Read %d bytes from fifo", read_bytes);
+    printk("nanomodbus - Read %d of %u bytes from fifo", read_bytes, count);
     return (int32_t)read_bytes;
 }
 

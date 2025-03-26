@@ -67,6 +67,7 @@ int32_t read_serial(uint8_t* buf, uint16_t count, int32_t byte_timeout_ms, void*
     }
 
     // Check for overflow and compute timeout
+    printk("nanomodbus - Receive timeout: %ld", byte_timeout_ms);
     if (byte_timeout_ms >= (INT32_MAX / HZ))
     {
         return -EINVAL;
@@ -92,9 +93,10 @@ int32_t read_serial(uint8_t* buf, uint16_t count, int32_t byte_timeout_ms, void*
     }
 
     // Result check
-    if (jiffies >= timestamp_timeout)
+    unsigned long timestamps_stop = jiffies;
+    if (timestamps_stop > timestamp_timeout)
     {
-        printk("nanomodbus - Read serial timed out");
+        printk("nanomodbus - Read serial timed out (read %d bytes). Timestamp start: %lu, timestamp stop: %lu", read_bytes, timestamp_now, timestamps_stop);
         return -ETIMEDOUT;
     }
 

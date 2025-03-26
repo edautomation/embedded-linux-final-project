@@ -19,7 +19,7 @@
 #define LOG_DEBUG(...)
 #endif
 
-#define DUMMY_DRIVER
+#define nDUMMY_DRIVER
 
 int fd = 0;
 

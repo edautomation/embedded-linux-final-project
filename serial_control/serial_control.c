@@ -135,19 +135,26 @@ static void handle_write_command(void)
     char* write_command = buffer + 1;  // ignore the '!' from now on.
 
     char name[MAX_NAME_LENGTH];
-    uint16_t value = 0;
+    uint32_t value = 0;
     int n_matches = sscanf(write_command, "%30[^=]=%u", name, &value);
     if (2 == n_matches)
     {
-        struct data_t* hash_table_entry = ht_get(hash_table, name);
-        if (NULL == hash_table_entry)
+        if (value > UINT16_MAX)
         {
-            LOG_DEBUG("Could not find \"%s\" in mapping!\n", name);
+            LOG_DEBUG("Invalid value (bigger than UINT16_MAX)\n");
         }
         else
         {
-            LOG_DEBUG("Writing %u to register \"%s\" at address %u\n", value, name, hash_table_entry->addr);
-            // TODO: write to driver
+            struct data_t* hash_table_entry = ht_get(hash_table, name);
+            if (NULL == hash_table_entry)
+            {
+                LOG_DEBUG("Could not find \"%s\" in mapping!\n", name);
+            }
+            else
+            {
+                LOG_DEBUG("Writing %u to register \"%s\" at address %u\n", value, name, hash_table_entry->addr);
+                // TODO: write to driver
+            }
         }
     }
     else

@@ -259,6 +259,8 @@ static void read_map_file(const char* filename)
             }
         }
     } while (len > 0);
+    free(line_buf);
+    fclose(map_file);
 }
 
 int main(int argc, char* argv[])

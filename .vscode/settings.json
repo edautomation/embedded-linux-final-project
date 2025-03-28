@@ -2,6 +2,7 @@
     "files.associations": {
         "unistd.h": "c",
         "byte_fifo.h": "c",
-        "ht.h": "c"
+        "ht.h": "c",
+        "type_traits": "c"
     }
 }

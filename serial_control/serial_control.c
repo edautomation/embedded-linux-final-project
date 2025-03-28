@@ -18,7 +18,7 @@
 #define MAX_CMD_LENGTH   MAX_NAME_LENGTH + MAX_VALUE_LENGTH + 1
 #define BUFFER_SIZE      (MAX_CMD_LENGTH + 1)
 
-#define DEBUG
+#define nDEBUG
 #ifdef DEBUG
 #define LOG_DEBUG(...) printf(__VA_ARGS__)
 #else
@@ -80,7 +80,7 @@ static inline void terminate_normally(void)
 
 static inline void terminate_with_error(void)
 {
-    LOG_DEBUG("Terminating because of an error\n");
+    printf("Terminating because of an error\n");
     cleanup();
     exit(EXIT_FAILURE);
 }
@@ -104,7 +104,7 @@ static enum command_type_t validate_and_prepare_input(char* input, int length)
     enum command_type_t cmd_type = COMMAND_INVALID;
     if ('\n' != input[length - 1])
     {
-        LOG_DEBUG("Command too long\n");
+        printf("Command too long\n");
     }
     else if ('!' == input[0])
     {
@@ -116,7 +116,7 @@ static enum command_type_t validate_and_prepare_input(char* input, int length)
     }
     else
     {
-        LOG_DEBUG("Invalid start of command\n");
+        printf("Invalid start of command\n");
     }
 
     if (!(COMMAND_INVALID == cmd_type))
@@ -141,25 +141,25 @@ static void handle_write_command(void)
     {
         if (value > UINT16_MAX)
         {
-            LOG_DEBUG("Invalid value (bigger than UINT16_MAX)\n");
+            printf("Invalid value (bigger than UINT16_MAX)\n");
         }
         else
         {
             struct data_t* hash_table_entry = ht_get(hash_table, name);
             if (NULL == hash_table_entry)
             {
-                LOG_DEBUG("Could not find \"%s\" in mapping!\n", name);
+                printf("Could not find \"%s\" in mapping!\n", name);
             }
             else
             {
-                LOG_DEBUG("Writing %u to register \"%s\" at address %u\n", value, name, hash_table_entry->addr);
+                printf("Writing %u to register \"%s\" at address %u\n", value, name, hash_table_entry->addr);
                 // TODO: write to driver
             }
         }
     }
     else
     {
-        LOG_DEBUG("Invalid format!\n");
+        printf("Invalid format!\n");
     }
 }
 
@@ -169,18 +169,18 @@ static void handle_read_command(void)
     size_t name_length = strlen(name);
     if (name_length > MAX_NAME_LENGTH)
     {
-        LOG_DEBUG("Invalid format, name string too long!\n");
+        printf("Invalid format, name string too long!\n");
     }
     else
     {
         struct data_t* hash_table_entry = ht_get(hash_table, name);
         if (NULL == hash_table_entry)
         {
-            LOG_DEBUG("Could not find \"%s\" in mapping!\n", name);
+            printf("Could not find \"%s\" in mapping!\n", name);
         }
         else
         {
-            LOG_DEBUG("Reading register \"%s\" at address %u\n", name, hash_table_entry->addr);
+            printf("Reading register \"%s\" at address %u\n", name, hash_table_entry->addr);
             // TODO: read from driver
         }
     }
@@ -191,7 +191,7 @@ static void read_map_file(const char* filename)
     hash_table = ht_create();
     if (NULL == hash_table)
     {
-        LOG_DEBUG("Out of memory - Could not create hash table\n");
+        printf("Out of memory - Could not create hash table\n");
         terminate_with_error();
     }
     else
@@ -202,7 +202,7 @@ static void read_map_file(const char* filename)
     FILE* map_file = fopen(filename, "r");
     if (NULL == map_file)
     {
-        LOG_DEBUG("Could not open mapping file. Abort.\n");
+        printf("Could not open mapping file. Abort.\n");
         terminate_with_error();
     }
     else
@@ -225,9 +225,8 @@ static void read_map_file(const char* filename)
         }
         else if (len > (MAX_NAME_LENGTH + MAX_VALUE_LENGTH))
         {
-            LOG_DEBUG("Line too long: %u\n", len);
-            LOG_DEBUG("Invalid line in map file: l.%u\n", line_nr);
-            LOG_DEBUG("Line too long: %u\n", len);
+            printf("Invalid line in map file: l.%u\n", line_nr);
+            printf("Line too long: %u\n", len);
             free(line_buf);
             fclose(map_file);
             terminate_with_error();
@@ -247,7 +246,7 @@ static void read_map_file(const char* filename)
                 LOG_DEBUG("Line has a valid format\n");
                 if (NULL == ht_set(hash_table, name, list_item))
                 {
-                    LOG_DEBUG("Out of memory - Could not add entry to hash table\n");
+                    printf("Out of memory - Could not add entry to hash table\n");
                     free(line_buf);
                     fclose(map_file);
                     terminate_with_error();
@@ -259,7 +258,7 @@ static void read_map_file(const char* filename)
             }
             else
             {
-                LOG_DEBUG("Invalid format in line: %s!\n", line_buf);
+                printf("Invalid format in line: %s!\n", line_buf);
                 free(line_buf);
                 fclose(map_file);
                 terminate_with_error();
@@ -272,15 +271,15 @@ static void read_map_file(const char* filename)
 
 int main(int argc, char* argv[])
 {
-    LOG_DEBUG("Hello, serial control!\n");
+    printf("Hello, serial control!\n");
 
     signal(SIGINT, handle_signal);
     signal(SIGTERM, handle_signal);
 
     if (argc < 2)
     {
-        LOG_DEBUG("Please specify a file with the modbus address mapping.\n");
-        LOG_DEBUG("Usage : serial_control path/to/your/file.txt\n");
+        printf("Please specify a file with the modbus address mapping.\n");
+        printf("Usage : serial_control path/to/your/file.txt\n");
         return EXIT_SUCCESS;
     }
 

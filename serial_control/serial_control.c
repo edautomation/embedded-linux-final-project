@@ -1,4 +1,5 @@
 #include <stdbool.h>
+#include <stdint.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -9,6 +10,8 @@
 #include <sys/stat.h>
 #include <sys/types.h>
 #include <unistd.h>
+
+#include "ht.h"
 
 #define MAX_NAME_LENGTH  30
 #define MAX_VALUE_LENGTH 20
@@ -29,16 +32,14 @@ enum command_type_t
     COMMAND_WRITE,
 };
 
-struct data_t
+struct modbus_reg_t
 {
     char name[MAX_NAME_LENGTH];
-    char value[MAX_VALUE_LENGTH];
-    struct data_t* next;
+    uint16_t addr;
 };
 
 static char* buffer = NULL;
-static struct data_t list_root = {0};
-static struct data_t* list_head = &list_root;
+static ht* hash_table = NULL;
 
 static inline void cleanup(void)
 {
@@ -47,12 +48,9 @@ static inline void cleanup(void)
         free(buffer);
     }
 
-    struct data_t* list_item = list_head;
-    while (&list_root != list_item)
+    if (NULL != hash_table)
     {
-        struct data_t* item_to_delete = list_item;
-        list_item = list_item->next;
-        free(item_to_delete);
+        ht_destroy(hash_table);
     }
 }
 
@@ -113,66 +111,23 @@ static enum command_type_t validate_and_prepare_input(char* input, int length)
     return cmd_type;
 }
 
-static void add_or_update_value_for_name(char* string, size_t name_length, char* equal_sign, size_t value_length)
-{
-    char name[MAX_NAME_LENGTH];
-    memset((void*)name, 0, MAX_NAME_LENGTH);
-    strncpy(name, string, name_length);
-    bool is_new = true;
-    struct data_t* list_item = list_head;
-    do
-    {
-        if (0 == strncmp(list_item->name, name, name_length))
-        {
-            LOG_DEBUG("Found name!\n");
-            is_new = false;
-            break;
-        }
-        list_item = list_item->next;
-    } while (NULL != list_item);
-
-    if (is_new)
-    {
-        LOG_DEBUG("New name: %s\n", name);
-        list_item = malloc(sizeof(struct data_t));
-    }
-
-    strncpy(list_item->name, name, name_length);
-    strncpy(list_item->value, equal_sign + 1, value_length);
-    list_item->name[name_length] = '\0';
-    list_item->value[value_length] = '\0';
-    LOG_DEBUG("Writing %s = %s\n", list_item->name, list_item->value);
-    printf("OK\n");
-
-    if (is_new)
-    {
-        list_item->next = list_head;
-        list_head = list_item;
-    }
-}
-
 static void handle_write_command(void)
 {
     LOG_DEBUG("Write command\n");
 
-    char* write_command = buffer + 1;
-    char* equal_sign = strchr(write_command, '=');
-    if (NULL == equal_sign)
+    char* write_command = buffer + 1;  // ignore the '!' from now on.
+
+    char name[MAX_NAME_LENGTH];
+    uint16_t value = 0;
+    int n_matches = sscanf(write_command, "%30[^=]=%u", name, &value);
+    if (2 == n_matches)
     {
-        LOG_DEBUG("Invalid format, missing =\n");
+        LOG_DEBUG("Parsed %s=%u", name, value);
+        // TODO : find name in hash table and write corresponding register
     }
     else
     {
-        size_t name_length = equal_sign - write_command;
-        size_t value_length = strlen(write_command) - name_length - 1;
-        if (name_length > MAX_NAME_LENGTH || value_length > MAX_VALUE_LENGTH)
-        {
-            LOG_DEBUG("Invalid format, name or value string too long\n");
-        }
-        else
-        {
-            add_or_update_value_for_name(write_command, name_length, equal_sign, value_length);
-        }
+        LOG_DEBUG("Invalid format!\n");
     }
 }
 
@@ -186,21 +141,8 @@ static void handle_read_command(void)
     }
     else
     {
-        struct data_t* list_item = list_head;
-        do
-        {
-            if (0 == strcmp(list_item->name, name))
-            {
-                printf("%s\n", list_item->value);
-                break;
-            }
-            list_item = list_item->next;
-        } while (NULL != list_item);
-
-        if (NULL == list_item)
-        {
-            printf("NO ENTRY\n");
-        }
+        LOG_DEBUG("Request to read %s", name);
+        // TODO : find name in hash table and read corresponding register
     }
 }
 
@@ -210,6 +152,89 @@ int main(int argc, char* argv[])
 
     signal(SIGINT, handle_signal);
     signal(SIGTERM, handle_signal);
+
+    if (argc < 2)
+    {
+        LOG_DEBUG("Please specify a file with the modbus address mapping.\n");
+        LOG_DEBUG("Usage : serial_control path/to/your/file.txt\n");
+        return EXIT_SUCCESS;
+    }
+
+    hash_table = ht_create();
+    if (NULL == hash_table)
+    {
+        LOG_DEBUG("Out of memory - Could not create hash table\n");
+        return EXIT_FAILURE;
+    }
+    else
+    {
+        LOG_DEBUG("Hash table created\n");
+    }
+
+    const char* mapping_filename = argv[1];
+    FILE* map_file = fopen(mapping_filename, "r");
+    if (NULL == map_file)
+    {
+        LOG_DEBUG("Could not open mapping file. Abort.\n");
+        terminate_with_error();
+    }
+    else
+    {
+        LOG_DEBUG("File open\n");
+    }
+
+    char* line_buf = NULL;
+    size_t buf_len = 0;
+    ssize_t len = 0;
+    size_t line_nr = 0;
+    do
+    {
+        line_nr++;
+        len = getline(&line_buf, &buf_len, map_file);
+        if (len < 0)
+        {
+            LOG_DEBUG("Could not read line or finished reading file\n");
+            break;
+        }
+        else if (len > (MAX_NAME_LENGTH + MAX_VALUE_LENGTH))
+        {
+            LOG_DEBUG("Line too long: %u\n", len);
+            LOG_DEBUG("Invalid line in map file: l.%u\n", line_nr);
+            LOG_DEBUG("Line too long: %u\n", len);
+            free(line_buf);
+            fclose(map_file);
+            terminate_with_error();
+        }
+        else
+        {
+            LOG_DEBUG("Got line: %s\n", line_buf);
+            char name[MAX_NAME_LENGTH];
+            uint16_t addr;
+            int n_matches = sscanf(line_buf, "%30[^,],%u", name, &addr);
+            if (2 == n_matches)
+            {
+                LOG_DEBUG("Line has a valid format\n");
+                if (NULL == ht_set(hash_table, name, &addr))
+                {
+                    LOG_DEBUG("Out of memory - Could not add entry to hash table\n");
+                    free(line_buf);
+                    fclose(map_file);
+                    terminate_with_error();
+                }
+                else
+                {
+                    LOG_DEBUG("Added mapping: %s, %u\n", name, addr);
+                }
+            }
+            else
+            {
+                LOG_DEBUG("Invalid format in line: %s!\n", line_buf);
+                free(line_buf);
+                fclose(map_file);
+                terminate_with_error();
+            }
+        }
+    } while (len > 0);
 
     while (true)
     {

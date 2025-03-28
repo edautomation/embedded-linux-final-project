@@ -1,4 +1,5 @@
 serial_control/serial_control
+serial_control/mapping.txt
 serial_demo/serial_demo
 
 # Prerequisites

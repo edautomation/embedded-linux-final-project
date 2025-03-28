@@ -1,6 +1,7 @@
 {
     "files.associations": {
         "unistd.h": "c",
-        "byte_fifo.h": "c"
+        "byte_fifo.h": "c",
+        "ht.h": "c"
     }
 }

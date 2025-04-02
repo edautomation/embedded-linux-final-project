@@ -11,6 +11,7 @@
 #include <sys/types.h>
 #include <unistd.h>
 
+#include "../serial_driver/serial_modbus_ioctl.h"
 #include "ht.h"
 
 #define MAX_NAME_LENGTH  30
@@ -49,6 +50,7 @@ static struct data_t* list_head = &list_root;
 
 static char* buffer = NULL;
 static ht* hash_table = NULL;
+static int fd = 0;
 
 static inline void cleanup(void)
 {
@@ -68,6 +70,11 @@ static inline void cleanup(void)
         struct data_t* item_to_delete = list_item;
         list_item = list_item->next;
         free(item_to_delete);
+    }
+
+    if (0 != fd)
+    {
+        close(fd);
     }
 }
 
@@ -128,6 +135,50 @@ static enum command_type_t validate_and_prepare_input(char* input, int length)
     return cmd_type;
 }
 
+static int read_from_modbus(int fd, uint16_t* buf, size_t n_regs)
+{
+    size_t n_bytes = n_regs * sizeof(uint16_t);
+    int res = read(fd, buf, n_bytes);
+    if (res < 0)
+    {
+        printf("ERR - Could not read from modbus driver: %d\n", res);
+    }
+    else
+    {
+        printf("INFO - Read %d bytes from modbus driver: \n", res);
+    }
+    return res;
+}
+
+static int write_to_modbus(int fd, uint16_t* buf, size_t n_regs)
+{
+    size_t n_bytes = n_regs * sizeof(uint16_t);
+    int res = write(fd, buf, n_bytes);
+    if (res < 0)
+    {
+        printf("ERR - Could not write to modbus driver: %d\n", res);
+    }
+    else
+    {
+        printf("INFO - Wrote %d bytes to modbus driver: \n", res);
+    }
+    return res;
+}
+
+static int set_modbus_address(int fd, unsigned long address)
+{
+    int res = ioctl(fd, SERIAL_MODBUSCHAR_IOCSETADDR, &address);
+    if (res < 0)
+    {
+        printf("ERR - Could not set modbus address %lu. Reason: %d\n", address, res);
+    }
+    else
+    {
+        printf("INFO - Set modbus address to %lu\n", address);
+    }
+    return res;
+}
+
 static void handle_write_command(void)
 {
     LOG_DEBUG("Write command\n");
@@ -153,7 +204,10 @@ static void handle_write_command(void)
             else
             {
                 printf("Writing %u to register \"%s\" at address %u\n", value, name, hash_table_entry->addr);
-                // TODO: write to driver
+                if (set_modbus_address(fd, hash_table_entry->addr) >= 0)
+                {
+                    write_to_modbus(fd, (uint16_t)value, 1);
+                }
             }
         }
     }
@@ -181,7 +235,12 @@ static void handle_read_command(void)
         else
         {
             printf("Reading register \"%s\" at address %u\n", name, hash_table_entry->addr);
-            // TODO: read from driver
+            if (set_modbus_address(fd, hash_table_entry->addr) >= 0)
+            {
+                uint16_t value = 0;
+                read_from_modbus(fd, &value, 1);
+                printf("\"%s\" = %u\n", name, value);
+            }
         }
     }
 }
@@ -281,6 +340,17 @@ int main(int argc, char* argv[])
         printf("Please specify a file with the modbus address mapping.\n");
         printf("Usage : serial_control path/to/your/file.txt\n");
         return EXIT_SUCCESS;
+    }
+
+#ifndef DUMMY_DRIVER
+    fd = open("/dev/serial_modbus", O_RDWR);
+#else
+    fd = open("/var/tmp/dummy_modbus_drv.txt", O_CREAT | O_RDWR | O_TRUNC, S_IRUSR | S_IWUSR);
+#endif
+    if (fd < 0)
+    {
+        printf("ERR - Could not open serial modbus driver\n");
+        return EXIT_FAILURE;
     }
 
     read_map_file(argv[1]);

@@ -1,8 +1,11 @@
 #ifndef BYTE_FIFO_H_
 #define BYTE_FIFO_H_
 
-#include <linux/mutex.h>
+#ifdef __KERNEL__
 #include <linux/types.h>
+#else
+#include < stdint.h>
+#endif
 
 #ifdef __cplusplus
 extern "C" {
@@ -15,7 +18,6 @@ struct byte_fifo_t
     unsigned int write_index;
     unsigned int read_index;
     unsigned int n_elements;
-    struct mutex lock;
 };
 
 int16_t byte_fifo_init(struct byte_fifo_t* const fifo);

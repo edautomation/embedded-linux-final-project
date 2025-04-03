@@ -1,5 +1,5 @@
 CC ?= $(CROSS_COMPILE)gcc
-CFLAGS ?= -Wall -g -O0
+CFLAGS ?= -Wall -g -O0 -Wno-format
 LDFLAGS ?= -lpthread -lrt
 SRC = $(wildcard *.c)
 OBJ = $(SRC:.c=.o)
@@ -13,11 +13,10 @@ default : $(TARGET)
 $(TARGET) : $(OBJ)
 	$(CC) $(OBJ) -o $(TARGET) $(LDFLAGS) 
 
-*.o: *.c
+*.o: *.c 
 	$(CC) $(CFLAGS) -c $< -o $@	
 
 clean:
 	rm -f $(OBJ) $(TARGET)
 
-
-PHONY: all clean
+PHONY: all default clean

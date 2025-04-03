@@ -206,7 +206,8 @@ static void handle_write_command(void)
                 printf("Writing %u to register \"%s\" at address %u\n", value, name, hash_table_entry->addr);
                 if (set_modbus_address(fd, hash_table_entry->addr) >= 0)
                 {
-                    write_to_modbus(fd, (uint16_t)value, 1);
+                    uint16_t value_16bits = (uint16_t)value;
+                    write_to_modbus(fd, &value_16bits, 1);
                 }
             }
         }

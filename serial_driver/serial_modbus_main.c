@@ -225,7 +225,7 @@ ssize_t modbus_dev_read(struct file* filp, char __user* buf, size_t count, loff_
     // Get data back to user space
     if (copy_to_user(buf, kbuffer, buffer_size) > 0)
     {
-        printk("Modbus device - Could not copy from user space!");
+        printk("Modbus device - Could not copy read data to user space!");
         kfree(kbuffer);
         return -EFAULT;
     }
@@ -309,6 +309,7 @@ long int modbus_dev_ioctl(struct file* filp, unsigned int cmd, unsigned long arg
 
     // Actual purpose of the ioctl call
     handle->start_address = new_address;
+    printk("Modbus device - Set address %lu", new_address);
 
     return 0;
 }

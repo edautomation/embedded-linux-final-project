@@ -72,7 +72,7 @@ int32_t read_serial(uint8_t* buf, uint16_t count, int32_t byte_timeout_ms, void*
     if (0 == byte_timeout_ms)
     {
         mutex_lock(&fifo_lock);
-        int res = byte_fifo_reset(&rx_fifo);
+        int res = byte_fifo_init(&rx_fifo);
         mutex_unlock(&fifo_lock);
         return res;
     }

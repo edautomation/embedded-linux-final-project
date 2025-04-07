@@ -1,0 +1,3 @@
+[submodule "simple-fifo"]
+	path = simple-fifo
+	url = git@github.com:edautomation/simple-fifo.git

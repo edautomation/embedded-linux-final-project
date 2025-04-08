@@ -367,7 +367,7 @@ static struct serdev_device_driver serdev_serial_driver = {
 // Callback is called whenever a character is received
 static int serdev_serial_recv(struct serdev_device* serdev, const unsigned char* buffer, size_t size)
 {
-    printk("serdev_serial - Received %u bytes \n", size);
+    printk("serdev_serial - Received %u bytes \n", (uint32_t)size);
 
     mutex_lock(&fifo_lock);
     int res = byte_fifo_write(&rx_fifo, buffer, size);
@@ -382,7 +382,7 @@ static int serdev_serial_recv(struct serdev_device* serdev, const unsigned char*
     }
     else
     {
-        printk("serdev_serial - Write %u bytes to fifo", size);
+        printk("serdev_serial - Write %u bytes to fifo", (uint32_t)size);
     }
 
     return size;

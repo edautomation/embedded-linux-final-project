@@ -14,7 +14,7 @@ EXTRA_CFLAGS += $(DEBFLAGS)
 ifneq ($(KERNELRELEASE),)
 # call from kernel build system
 obj-m	:= serial_modbus.o 
-serial_modbus-y := nanomodbus.o serial_modbus_main.o
+serial_modbus-y := nanomodbus.o serial_modbus_main.o ../simple-fifo/byte_fifo.o
 ccflags-y := -std=gnu99 -Wno-declaration-after-statement -Wno-vla -I$(src)/../simple-fifo/
 else
 

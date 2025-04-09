@@ -35,6 +35,7 @@ int modbus_dev_minor = 0;
 static nmbs_t nmbs;
 
 // Synchronization fifo
+static struct mutex fifo_lock;
 static unsigned char rx_buffer[BUFFER_LENGTH];
 static struct byte_fifo_t rx_fifo = {
     .data = rx_buffer,
@@ -70,7 +71,10 @@ int32_t read_serial(uint8_t* buf, uint16_t count, int32_t byte_timeout_ms, void*
     // Clear fifo and return immediately when timeout is zero
     if (0 == byte_timeout_ms)
     {
-        return byte_fifo_reset(&rx_fifo);
+        mutex_lock(&fifo_lock);
+        int res = byte_fifo_init(&rx_fifo);
+        mutex_unlock(&fifo_lock);
+        return res;
     }
 
     // Compute timeout
@@ -84,7 +88,9 @@ int32_t read_serial(uint8_t* buf, uint16_t count, int32_t byte_timeout_ms, void*
     while ((read_bytes < count) && (ktime_get_ns() < timestamp_timeout))
     {
         uint16_t bytes_left_to_read = count - read_bytes;
+        mutex_lock(&fifo_lock);
         int16_t res = byte_fifo_read(&rx_fifo, buf, bytes_left_to_read);
+        mutex_unlock(&fifo_lock);
         if (res >= 0)
         {
             read_bytes += res;
@@ -361,9 +367,11 @@ static struct serdev_device_driver serdev_serial_driver = {
 // Callback is called whenever a character is received
 static int serdev_serial_recv(struct serdev_device* serdev, const unsigned char* buffer, size_t size)
 {
-    printk("serdev_serial - Received %u bytes \n", size);
+    printk("serdev_serial - Received %u bytes \n", (uint32_t)size);
 
+    mutex_lock(&fifo_lock);
     int res = byte_fifo_write(&rx_fifo, buffer, size);
+    mutex_unlock(&fifo_lock);
     if (res > 0)
     {
         printk("serdev_serial - Overwrote %d bytes in fifo", res);
@@ -374,7 +382,7 @@ static int serdev_serial_recv(struct serdev_device* serdev, const unsigned char*
     }
     else
     {
-        printk("serdev_serial - Write %u bytes to fifo", size);
+        printk("serdev_serial - Write %u bytes to fifo", (uint32_t)size);
     }
 
     return size;
@@ -448,6 +456,7 @@ static int __init my_init(void)
     byte_fifo_init(&rx_fifo);
     modbus_dev.fifo = &rx_fifo;
     mutex_init(&modbus_dev.modbus_lock);
+    mutex_init(&fifo_lock);
 
     nmbs_error status = init_modbus_client(&nmbs);
     if (NMBS_ERROR_NONE != status)
